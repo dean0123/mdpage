@@ -9,9 +9,12 @@ import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import { marked } from 'marked'
 import Sidebar from './Sidebar'
+import LinkDialog from './editor/LinkDialog'
 import { db, Page, Folder } from '../services/db'
 import { storage } from '../services/storage'
 import { ensureFolderAndPage } from '../services/pageHelper'
+import { getMarkdownFromEditor, extractPageTitle } from '../utils/markdownConverter'
+import { exportMarkdownFile, importMarkdownFile } from '../utils/fileOperations'
 import '../styles/editor.css'
 
 const MarkdownEditor = () => {
@@ -40,28 +43,6 @@ const MarkdownEditor = () => {
   const autoSaveTimer = useRef<number | null>(null)
   const editorScrollRef = useRef<HTMLDivElement>(null)
 
-  // 從 Markdown 文本中提取第一行作為標題
-  const extractPageTitle = (markdown: string): string => {
-    if (!markdown.trim()) return '新頁面'
-
-    const lines = markdown.split('\n')
-    const firstLine = lines[0].trim()
-
-    if (!firstLine) return '新頁面'
-
-    // 移除 Markdown 標題符號（# ## ### 等）
-    const withoutHash = firstLine.replace(/^#+\s*/, '')
-
-    // 移除其他 Markdown 格式符號
-    const cleanTitle = withoutHash
-      .replace(/\*\*/g, '')  // 粗體
-      .replace(/\*/g, '')    // 斜體
-      .replace(/`/g, '')     // 代碼
-      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')  // 鏈接
-      .trim()
-
-    return cleanTitle || '新頁面'
-  }
 
   // 統一的保存函數
   const saveCurrentPage = async (content: string): Promise<void> => {
@@ -282,138 +263,6 @@ const MarkdownEditor = () => {
     }
   }, [showTableMenu])
 
-  const getMarkdownFromEditor = (editorInstance: any) => {
-    if (!editorInstance) return ''
-
-    // 获取编辑器的 JSON 内容
-    const json = editorInstance.getJSON()
-
-    // 改进的 JSON 到 Markdown 转换
-    const jsonToMarkdown = (node: any, depth = 0): string => {
-      if (node.type === 'doc') {
-        const items = node.content?.map((child: any) => jsonToMarkdown(child, depth)) || []
-        // 智能处理换行：只在非空内容之间添加空行
-        return items.filter((item: string) => item.trim()).join('\n\n')
-      }
-
-      if (node.type === 'heading') {
-        const level = node.attrs?.level || 1
-        const text = node.content?.map((child: any) => jsonToMarkdown(child, depth)).join('') || ''
-        return '#'.repeat(level) + ' ' + text
-      }
-
-      if (node.type === 'paragraph') {
-        const content = node.content?.map((child: any) => jsonToMarkdown(child, depth)).join('') || ''
-        return content
-      }
-
-      if (node.type === 'text') {
-        let text = node.text || ''
-        if (node.marks) {
-          const linkMark = node.marks.find((mark: any) => mark.type === 'link')
-
-          // 处理格式标记（bold, italic, code）
-          node.marks.forEach((mark: any) => {
-            if (mark.type === 'bold') text = `**${text}**`
-            if (mark.type === 'italic') text = `*${text}*`
-            if (mark.type === 'code') text = `\`${text}\``
-          })
-
-          // 最后应用链接（包装所有其他格式）
-          if (linkMark) {
-            text = `[${text}](${linkMark.attrs.href})`
-          }
-        }
-        return text
-      }
-
-      if (node.type === 'bulletList') {
-        return node.content?.map((child: any) => jsonToMarkdown(child, depth)).join('\n') || ''
-      }
-
-      if (node.type === 'orderedList') {
-        return node.content?.map((child: any, index: number) => {
-          const content = jsonToMarkdown(child, depth)
-          return content.replace(/^- /, `${index + 1}. `)
-        }).join('\n') || ''
-      }
-
-      if (node.type === 'listItem') {
-        // 处理列表项中的多个段落
-        const paragraphs = node.content?.map((child: any) => {
-          if (child.type === 'paragraph') {
-            return jsonToMarkdown(child, depth + 1)
-          }
-          return jsonToMarkdown(child, depth + 1)
-        }) || []
-
-        const firstPara = paragraphs[0] || ''
-        const restParas = paragraphs.slice(1)
-
-        let result = '- ' + firstPara
-        if (restParas.length > 0) {
-          result += '\n  ' + restParas.join('\n  ')
-        }
-        return result
-      }
-
-      if (node.type === 'codeBlock') {
-        const code = node.content?.map((child: any) => child.text || '').join('\n') || ''
-        return '```\n' + code + '\n```'
-      }
-
-      if (node.type === 'blockquote') {
-        const content = node.content?.map((child: any) => jsonToMarkdown(child, depth)).join('\n\n') || ''
-        return content.split('\n').map((line: string) => '> ' + line).join('\n')
-      }
-
-      if (node.type === 'horizontalRule') {
-        return '---'
-      }
-
-      if (node.type === 'hardBreak') {
-        return '  \n'  // Markdown 硬换行：两个空格 + 换行
-      }
-
-      if (node.type === 'table') {
-        return convertTableToMarkdown(node)
-      }
-
-      if (node.type === 'tableRow' || node.type === 'tableCell' || node.type === 'tableHeader') {
-        // 这些由 table 节点统一处理
-        return ''
-      }
-
-      return ''
-    }
-
-    const convertTableToMarkdown = (tableNode: any): string => {
-      const rows = tableNode.content || []
-      if (rows.length === 0) return ''
-
-      let markdown = ''
-      rows.forEach((row: any, rowIndex: number) => {
-        const cells = row.content || []
-        const cellContents = cells.map((cell: any) => {
-          return cell.content?.map((p: any) => {
-            return p.content?.map((t: any) => t.text || '').join('') || ''
-          }).join(' ') || ''
-        })
-
-        markdown += '| ' + cellContents.join(' | ') + ' |\n'
-
-        // 添加分隔线（在第一行后）
-        if (rowIndex === 0) {
-          markdown += '| ' + cellContents.map(() => '---').join(' | ') + ' |\n'
-        }
-      })
-
-      return markdown
-    }
-
-    return jsonToMarkdown(json)
-  }
-
   const handleToggleMarkdownMode = () => {
     if (!isMarkdownMode) {
       // 切换到 Markdown 模式：markdownText 已經是最新的
@@ -433,44 +282,24 @@ const MarkdownEditor = () => {
 
   const handleExportMarkdown = () => {
     // markdownText 始終是最新的
-    const blob = new Blob([markdownText], { type: 'text/markdown;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `markdown-${new Date().toISOString().split('T')[0]}.md`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    exportMarkdownFile(markdownText)
   }
 
   const handleImportMarkdown = () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.md,.markdown,.txt'
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (file) {
-        const reader = new FileReader()
-        reader.onload = (event) => {
-          const content = event.target?.result as string
-          // 設置 Markdown 文本（主要數據源）
-          setMarkdownText(content)
+    importMarkdownFile((content) => {
+      // 設置 Markdown 文本（主要數據源）
+      setMarkdownText(content)
 
-          if (!isMarkdownMode) {
-            // 如果在 WYSIWYG 模式，同步更新編輯器
-            isSyncingFromMarkdown.current = true
-            const html = marked(content) as string
-            editor?.commands.setContent(html)
-            setTimeout(() => {
-              isSyncingFromMarkdown.current = false
-            }, 0)
-          }
-        }
-        reader.readAsText(file)
+      if (!isMarkdownMode) {
+        // 如果在 WYSIWYG 模式，同步更新編輯器
+        isSyncingFromMarkdown.current = true
+        const html = marked(content) as string
+        editor?.commands.setContent(html)
+        setTimeout(() => {
+          isSyncingFromMarkdown.current = false
+        }, 0)
       }
-    }
-    input.click()
+    })
   }
 
   const handleClearEditor = () => {
@@ -984,65 +813,17 @@ const MarkdownEditor = () => {
       </div>
 
       {/* Link Dialog */}
-      {showLinkDialog && (
-        <div className="modal-overlay" onClick={() => setShowLinkDialog(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>插入連結</h2>
-              <button className="modal-close" onClick={() => setShowLinkDialog(false)}>
-                ✕
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label htmlFor="link-text">連結文字</label>
-                <input
-                  id="link-text"
-                  type="text"
-                  className="form-input"
-                  value={linkText}
-                  onChange={(e) => setLinkText(e.target.value)}
-                  placeholder="請輸入連結顯示的文字"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="link-url">URL 網址</label>
-                <input
-                  id="link-url"
-                  type="url"
-                  className="form-input"
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  placeholder="https://example.com"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              {editor?.isActive('link') && (
-                <button
-                  className="modal-button modal-button-secondary"
-                  onClick={handleRemoveLink}
-                >
-                  移除連結
-                </button>
-              )}
-              <button
-                className="modal-button"
-                onClick={handleInsertLink}
-              >
-                {editor?.isActive('link') ? '更新連結' : '插入連結'}
-              </button>
-              <button
-                className="modal-button modal-button-secondary"
-                onClick={() => setShowLinkDialog(false)}
-              >
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <LinkDialog
+        isOpen={showLinkDialog}
+        linkText={linkText}
+        linkUrl={linkUrl}
+        isEditing={editor?.isActive('link') || false}
+        onClose={() => setShowLinkDialog(false)}
+        onLinkTextChange={setLinkText}
+        onLinkUrlChange={setLinkUrl}
+        onInsertLink={handleInsertLink}
+        onRemoveLink={handleRemoveLink}
+      />
       </div>
     </div>
   )
