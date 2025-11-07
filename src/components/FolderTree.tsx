@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Folder, Page, db } from '../services/db'
+import { storage } from '../services/storage'
 
 interface FolderTreeProps {
   onSelectFolder: (folderId: string) => void
@@ -11,10 +12,13 @@ interface FolderTreeProps {
 
 const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFolderId, refreshKey }: FolderTreeProps) => {
   const [folders, setFolders] = useState<Folder[]>([])
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  // 初始化時從 localStorage 恢復展開狀態
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => {
+    const savedExpandedFolders = storage.getExpandedFolders()
+    return new Set(savedExpandedFolders)
+  })
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
-  const [folderCounter, setFolderCounter] = useState(1)
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
   const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null)
   const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null)
@@ -53,9 +57,26 @@ const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFol
     const siblings = folders.filter(f => f.parentId === parentId)
     const maxOrder = siblings.length > 0 ? Math.max(...siblings.map(f => f.order)) : -1
 
+    // 掃描同級文件夾，找出所有 "新檔案夾" 開頭的名稱，並提取最大數字
+    const newFolderPattern = /^新檔案夾(\d+)$/
+    let maxNumber = 0
+
+    siblings.forEach(folder => {
+      const match = folder.name.match(newFolderPattern)
+      if (match) {
+        const number = parseInt(match[1], 10)
+        if (number > maxNumber) {
+          maxNumber = number
+        }
+      }
+    })
+
+    // 新文件夾名稱為最大數字 + 1
+    const newFolderName = `新檔案夾${maxNumber + 1}`
+
     const newFolder: Folder = {
       id: `folder-${Date.now()}`,
-      name: `新檔案夾${folderCounter}`,
+      name: newFolderName,
       parentId,
       order: maxOrder + 1,
       createdAt: Date.now(),
@@ -63,39 +84,24 @@ const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFol
     }
 
     await db.createFolder(newFolder)
-    setFolderCounter(folderCounter + 1)
 
-    // 展開父文件夾
+    // 如果有 ParentID 展開父文件夾
     if (parentId) {
-      setExpandedFolders(new Set([...expandedFolders, parentId]))
+      const newExpanded = new Set([...expandedFolders, parentId])
+      setExpandedFolders(newExpanded)
+      // 保存展開狀態到 localStorage
+      storage.saveExpandedFolders(Array.from(newExpanded))
     }
 
     // 重新加載文件夾列表
     await loadFolders()
 
-    // 1. 選擇這個新文件夾
-    onSelectFolder(newFolder.id)
 
-    // 2. 在這個文件夾下創建一個新頁面
-    const newPage: Page = {
-      id: `page-${Date.now()}`,
-      folderId: newFolder.id,
-      name: '新頁面',
-      content: '',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    }
-
-    await db.createPage(newPage)
-
-    // 3. 選擇這個新頁面
-    onSelectPage(newPage)
-
-    // 4. 延遲一下，確保頁面選擇完成後再進入文件夾編輯模式
-    setTimeout(() => {
-      setEditingFolderId(newFolder.id)
-      setEditingName(newFolder.name)
-    }, 100)
+    // 直接進入文件夾編輯模式，不創建頁面，不選擇文件夾
+    // 1. 先選擇這個新文件夾                                                                                                         ╎│
+    onSelectFolder(newFolder.id) 
+    setEditingFolderId(newFolder.id)
+    setEditingName(newFolder.name)
   }
 
   const handleUpdateFolder = async (folder: Folder, newName: string) => {
@@ -136,8 +142,7 @@ const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFol
       return
     }
 
-    // 所有頁面都是空白的，可以刪除
-    if (!confirm('確定要刪除此檔案夾及其所有子檔案夾和空白頁面嗎？')) return
+    // 所有頁面都是空白的，可以直接刪除，不需要確認
 
     // **在刪除前，記錄被刪除 folder 的信息**
     const deletedFolder = folders.find(f => f.id === folderId)
@@ -226,6 +231,9 @@ const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFol
       newExpanded.add(folderId)
     }
     setExpandedFolders(newExpanded)
+
+    // 保存展開狀態到 localStorage
+    storage.saveExpandedFolders(Array.from(newExpanded))
   }
 
   const handleDragStart = (e: React.DragEvent, folderId: string) => {

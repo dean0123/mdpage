@@ -492,6 +492,11 @@ const MarkdownEditor = () => {
   const handleSelectPage = async (page: Page) => {
     // 如果選擇的是空頁面（刪除頁面時），清空編輯器
     if (!page.id) {
+      // **重要：清除自動保存 timer，避免保存已刪除的頁面**
+      if (autoSaveTimer.current) {
+        clearTimeout(autoSaveTimer.current)
+        autoSaveTimer.current = null
+      }
       setCurrentPage(null)
       setMarkdownText('')
       editor?.commands.clearContent()
@@ -503,7 +508,12 @@ const MarkdownEditor = () => {
     // 保存當前頁面的最後狀態
     if (currentPage && autoSaveTimer.current) {
       clearTimeout(autoSaveTimer.current)
-      await saveCurrentPage(markdownText)
+      // **重要：直接從編輯器獲取最新內容，不使用 React 狀態**
+      // 因為 setMarkdownText 是異步的，狀態可能不是最新的
+      const latestContent = isMarkdownMode
+        ? markdownText  // Markdown 模式下使用狀態
+        : getMarkdownFromEditor(editor)  // WYSIWYG 模式下從編輯器獲取
+      await saveCurrentPage(latestContent || markdownText)
     }
 
     // 加載新頁面
@@ -577,7 +587,8 @@ const MarkdownEditor = () => {
     if (!currentPage) {
       try {
         // 使用統一的邏輯：確保有 folder 和 page
-        const { folder, page } = await ensureFolderAndPage()
+        // 傳入 selectedFolderId，如果有選中的 folder，就在該 folder 下創建頁面
+        const { folder, page } = await ensureFolderAndPage(selectedFolderId)
 
         // 設置選中的 folder 和 page
         setSelectedFolderId(folder.id)

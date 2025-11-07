@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Page, Folder, db } from '../services/db'
 import { ensureFolderAndPage } from '../services/pageHelper'
+import { storage } from '../services/storage'
 
 interface PageListProps {
   folderId: string | null
@@ -18,8 +19,15 @@ type SortOrder = 'asc' | 'desc'
 
 const PageList = ({ folderId, onSelectPage, onSelectFolder, onFolderCreated, onPageCreated, selectedPageId, selectedPage, refreshKey }: PageListProps) => {
   const [pages, setPages] = useState<Page[]>([])
-  const [sortBy, setSortBy] = useState<SortBy>('none')
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+  // 初始化時從 localStorage 恢復排序設定，默認為字母小到大
+  const [sortBy, setSortBy] = useState<SortBy>(() => {
+    const savedSort = storage.getPageSort()
+    return savedSort.sortBy as SortBy
+  })
+  const [sortOrder, setSortOrder] = useState<SortOrder>(() => {
+    const savedSort = storage.getPageSort()
+    return savedSort.sortOrder as SortOrder
+  })
   const [showSortMenu, setShowSortMenu] = useState(false)
 
   useEffect(() => {
@@ -28,7 +36,28 @@ const PageList = ({ folderId, onSelectPage, onSelectFolder, onFolderCreated, onP
     } else {
       setPages([])
     }
-  }, [folderId, selectedPageId])
+  }, [folderId])
+
+  // 當 selectedPage 更新時，同步更新 pages 數組中的對應頁面
+  useEffect(() => {
+    if (selectedPage && selectedPage.id) {
+      setPages(prevPages => {
+        // 檢查是否需要更新（避免不必要的重新渲染）
+        const existingPage = prevPages.find(p => p.id === selectedPage.id)
+        if (existingPage &&
+            (existingPage.name !== selectedPage.name ||
+             existingPage.content !== selectedPage.content ||
+             existingPage.updatedAt !== selectedPage.updatedAt)) {
+          // 更新 pages 數組中的對應頁面，並重新排序
+          const updatedPages = prevPages.map(p =>
+            p.id === selectedPage.id ? selectedPage : p
+          )
+          return sortPages(updatedPages)
+        }
+        return prevPages
+      })
+    }
+  }, [selectedPage])
 
   // 當 refreshKey 改變時，重新加載 pages
   useEffect(() => {
@@ -67,6 +96,7 @@ const PageList = ({ folderId, onSelectPage, onSelectFolder, onFolderCreated, onP
   }
 
   const sortPages = (pagesToSort: Page[]) => {
+    // 如果排序方式為 'none'，不進行排序，保持原有順序
     if (sortBy === 'none') {
       return pagesToSort
     }
@@ -79,7 +109,7 @@ const PageList = ({ folderId, onSelectPage, onSelectFolder, onFolderCreated, onP
       } else if (sortBy === 'createdAt') {
         compareResult = a.createdAt - b.createdAt
       } else if (sortBy === 'name') {
-        compareResult = a.name.localeCompare(b.name)
+        compareResult = a.name.localeCompare(b.name, 'zh-TW')
       }
 
       return sortOrder === 'asc' ? compareResult : -compareResult
@@ -89,19 +119,29 @@ const PageList = ({ folderId, onSelectPage, onSelectFolder, onFolderCreated, onP
   }
 
   const handleSortChange = (newSortBy: SortBy) => {
+    // 如果選擇 'none'，直接設置並保存
     if (newSortBy === 'none') {
       setSortBy('none')
+      storage.savePageSort('none', sortOrder)
       setShowSortMenu(false)
       return
     }
 
+    let newSortOrder: SortOrder
+
     if (sortBy === newSortBy) {
       // 切換排序方向
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+      newSortOrder = sortOrder === 'asc' ? 'desc' : 'asc'
+      setSortOrder(newSortOrder)
     } else {
       setSortBy(newSortBy)
-      setSortOrder('desc')
+      // 字母排序默認為升序（小到大），其他排序默認為降序（新到舊）
+      newSortOrder = newSortBy === 'name' ? 'asc' : 'desc'
+      setSortOrder(newSortOrder)
     }
+
+    // 保存排序設定到 localStorage
+    storage.savePageSort(sortBy === newSortBy ? sortBy : newSortBy, newSortOrder)
     setShowSortMenu(false)
   }
 
@@ -197,20 +237,64 @@ const PageList = ({ folderId, onSelectPage, onSelectFolder, onFolderCreated, onP
       if (!confirm('確定要刪除此頁面嗎？')) return
     }
 
-    await db.deletePage(pageId)
-    await loadPages()
+    // **在刪除前，記錄被刪除 page 在當前排序中的位置**
+    const deletedIndex = pages.findIndex(p => p.id === pageId)
 
-    // 如果刪除的是當前頁面，清空選擇
-    if (selectedPageId === pageId) {
-      onSelectPage({
-        id: '',
-        folderId: '',
-        name: '',
-        content: '',
-        createdAt: 0,
-        updatedAt: 0,
-      })
+    await db.deletePage(pageId)
+
+    // 重新加載 pages
+    if (!folderId) return
+    const folderPages = await db.getPagesByFolder(folderId)
+    const sortedPages = sortPages(folderPages)
+    setPages(sortedPages)
+
+    // ===== 刪除後的選擇邏輯 =====
+
+    // 只在刪除的是當前選中的頁面時才需要選擇新頁面
+    if (selectedPageId !== pageId) {
+      return
     }
+
+    // **重要：先清空當前頁面，避免 onSelectPage 時保存已刪除的頁面**
+    // 調用 onSelectPage 傳入空頁面，清空 MarkdownEditor 的 currentPage 和 autoSaveTimer
+    onSelectPage({
+      id: '',
+      folderId: '',
+      name: '',
+      content: '',
+      createdAt: 0,
+      updatedAt: 0,
+    })
+
+    // 1. 如果沒有任何 page 了，保持清空狀態
+    if (sortedPages.length === 0) {
+      console.log('情況1: 所有 page 已刪除，清空選擇')
+      return
+    }
+
+    // 延遲一下，確保清空操作完成後再選擇新頁面
+    setTimeout(() => {
+      // 2. 如果找不到被刪除的索引（deletedIndex === -1），選擇第一個 page
+      if (deletedIndex === -1) {
+        const firstPage = sortedPages[0]
+        onSelectPage(firstPage)
+        console.log('情況2: 找不到被刪除頁面的索引，選擇第一個 page:', firstPage.name)
+        return
+      }
+
+      // 3. 如果有下一個 page（被刪除的不是最後一個），選擇下一個
+      if (deletedIndex < sortedPages.length) {
+        const nextPage = sortedPages[deletedIndex]
+        onSelectPage(nextPage)
+        console.log('情況3: 選擇下一個 page:', nextPage.name)
+        return
+      }
+
+      // 4. 沒有下一個（刪除的是最後一個），選擇前一個
+      const prevPage = sortedPages[sortedPages.length - 1]
+      onSelectPage(prevPage)
+      console.log('情況4: 刪除的是最後一個，選擇前一個 page:', prevPage.name)
+    }, 50)
   }
 
   return (
@@ -255,14 +339,16 @@ const PageList = ({ folderId, onSelectPage, onSelectFolder, onFolderCreated, onP
                   字母順序
                   {sortBy === 'name' && (sortOrder === 'desc' ? '⬇' : '⬆')}
                 </button>
+
                 <div className="sort-menu-divider"></div>
                 <button
-                  className={`sort-menu-item ${sortBy === 'none' ? 'active' : ''}`}
-                  onClick={() => handleSortChange('none')}
-                >
-                  無
+                       className={`sort-menu-item ${sortBy === 'none' ? 'active' : ''}`}
+                       onClick={() => handleSortChange('none')}
+                   >
+                      無
                   {sortBy === 'none' && ' ✓'}
                 </button>
+
               </div>
             )}
           </div>

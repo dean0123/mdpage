@@ -4,6 +4,9 @@ interface AppState {
   selectedFolderId: string | null
   selectedPageId: string | null
   cursorPosition: number | null
+  expandedFolders: string[] // 展開的文件夾 ID 列表
+  pageSortBy: string // 頁面排序方式
+  pageSortOrder: string // 頁面排序順序
 }
 
 const STORAGE_KEY = 'ppage-app-state'
@@ -25,7 +28,13 @@ class StorageService {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
-        return JSON.parse(stored)
+        const state = JSON.parse(stored)
+        // 向後兼容：如果沒有排序設定，使用默認值
+        return {
+          ...state,
+          pageSortBy: state.pageSortBy || 'name',
+          pageSortOrder: state.pageSortOrder || 'asc',
+        }
       }
     } catch (error) {
       console.error('Failed to get state:', error)
@@ -34,6 +43,9 @@ class StorageService {
       selectedFolderId: null,
       selectedPageId: null,
       cursorPosition: null,
+      expandedFolders: [],
+      pageSortBy: 'name',
+      pageSortOrder: 'asc',
     }
   }
 
@@ -50,6 +62,31 @@ class StorageService {
   // 保存游標位置
   saveCursorPosition(position: number | null): void {
     this.saveState({ cursorPosition: position })
+  }
+
+  // 保存展開的文件夾
+  saveExpandedFolders(folderIds: string[]): void {
+    this.saveState({ expandedFolders: folderIds })
+  }
+
+  // 獲取展開的文件夾
+  getExpandedFolders(): string[] {
+    const state = this.getState()
+    return state.expandedFolders || []
+  }
+
+  // 保存頁面排序設定
+  savePageSort(sortBy: string, sortOrder: string): void {
+    this.saveState({ pageSortBy: sortBy, pageSortOrder: sortOrder })
+  }
+
+  // 獲取頁面排序設定
+  getPageSort(): { sortBy: string; sortOrder: string } {
+    const state = this.getState()
+    return {
+      sortBy: state.pageSortBy || 'name',
+      sortOrder: state.pageSortOrder || 'asc',
+    }
   }
 
   // 清除狀態
