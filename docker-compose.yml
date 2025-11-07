@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  markdown-editor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ppage-markdown-editor
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production

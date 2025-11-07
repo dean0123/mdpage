@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  markdown-editor-dev:
+    image: node:20-alpine
+    container_name: ppage-markdown-editor-dev
+    working_dir: /app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev"
+    environment:
+      - NODE_ENV=development
+    restart: unless-stopped
