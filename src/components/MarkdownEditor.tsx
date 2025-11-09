@@ -17,6 +17,15 @@ import { getMarkdownFromEditor, extractPageTitle } from '../utils/markdownConver
 import { exportMarkdownFile, importMarkdownFile } from '../utils/fileOperations'
 import '../styles/editor.css'
 
+// 輔助函數：將 Markdown 轉換為 HTML，並修復 marked 在 code block 末尾添加的換行符
+const markdownToHtml = (markdown: string): string => {
+  let html = marked(markdown) as string
+  // marked 會在 code block 內容末尾添加 \n，導致來回切換時累積空行
+  // 例如：<code>line1\nline2\n</code> → <code>line1\nline2</code>
+  html = html.replace(/\n(<\/code>)/g, '$1')
+  return html
+}
+
 const MarkdownEditor = () => {
   // 初始 Markdown 內容
   const initialMarkdown = ''
@@ -42,7 +51,7 @@ const MarkdownEditor = () => {
   const isSyncingFromMarkdown = useRef(false)
   const autoSaveTimer = useRef<number | null>(null)
   const editorScrollRef = useRef<HTMLDivElement>(null)
-
+  const isInitialLoad = useRef(true) // 追蹤是否為首次載入
 
   // 統一的保存函數
   const saveCurrentPage = async (content: string): Promise<void> => {
@@ -179,7 +188,7 @@ const MarkdownEditor = () => {
       TableHeader,
       TableCell,
     ],
-    content: marked(initialMarkdown) as string,
+    content: markdownToHtml(initialMarkdown),
     editorProps: {
       attributes: {
         class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none',
@@ -248,6 +257,36 @@ const MarkdownEditor = () => {
     }
   }, [markdownText, isMarkdownMode])
 
+  // 在首次載入時，如果有恢復的 page，將內容設置到編輯器中
+  useEffect(() => {
+    if (isInitialLoad.current && editor && currentPage && !isMarkdownMode) {
+      // 將 markdown 轉換為 HTML 並設置到編輯器
+      isSyncingFromMarkdown.current = true
+      const html = markdownToHtml(currentPage.content)
+      editor.commands.setContent(html || '<p></p>')
+
+      setTimeout(() => {
+        isSyncingFromMarkdown.current = false
+
+        // 恢復編輯器狀態
+        if (currentPage.editorState) {
+          // 恢復光標位置
+          if (currentPage.editorState.cursorPosition !== undefined) {
+            editor.commands.setTextSelection(currentPage.editorState.cursorPosition)
+          }
+
+          // 恢復滾動位置
+          if (currentPage.editorState.scrollTop !== undefined && editorScrollRef.current) {
+            editorScrollRef.current.scrollTop = currentPage.editorState.scrollTop
+          }
+        }
+
+        // 標記首次載入完成
+        isInitialLoad.current = false
+      }, 100)
+    }
+  }, [editor, currentPage, isMarkdownMode])
+
   // 点击外部关闭下拉菜单
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -270,7 +309,7 @@ const MarkdownEditor = () => {
     } else {
       // 切换回 WYSIWYG 模式：將 Markdown 轉換為 HTML 並設置到編輯器
       isSyncingFromMarkdown.current = true
-      const html = marked(markdownText) as string
+      const html = markdownToHtml(markdownText)
       editor?.commands.setContent(html)
       setIsMarkdownMode(false)
       // 使用 setTimeout 確保 setContent 完成後再重置標誌
@@ -293,7 +332,7 @@ const MarkdownEditor = () => {
       if (!isMarkdownMode) {
         // 如果在 WYSIWYG 模式，同步更新編輯器
         isSyncingFromMarkdown.current = true
-        const html = marked(content) as string
+        const html = markdownToHtml(content)
         editor?.commands.setContent(html)
         setTimeout(() => {
           isSyncingFromMarkdown.current = false
@@ -355,7 +394,7 @@ const MarkdownEditor = () => {
 
     if (!isMarkdownMode) {
       isSyncingFromMarkdown.current = true
-      const html = marked(page.content) as string
+      const html = markdownToHtml(page.content)
       editor?.commands.setContent(html || '<p></p>')
       setTimeout(() => {
         isSyncingFromMarkdown.current = false

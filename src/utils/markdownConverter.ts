@@ -85,7 +85,10 @@ export const getMarkdownFromEditor = (editorInstance: any): string => {
 
     if (node.type === 'codeBlock') {
       const code = node.content?.map((child: any) => child.text || '').join('\n') || ''
-      return '```\n' + code + '\n```'
+      // 移除末尾的單個換行符，避免在 code block 後出現多餘空行
+      // 原因：Tiptap 在 code block 最後一行按 Enter 後會保留換行符
+      const trimmedCode = code.replace(/\n$/, '')
+      return '```\n' + trimmedCode + '\n```'
     }
 
     if (node.type === 'blockquote') {
