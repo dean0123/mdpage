@@ -208,6 +208,19 @@ class DatabaseService {
     })
   }
 
+  async getAllPages(): Promise<Page[]> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([PAGE_STORE], 'readonly')
+      const store = transaction.objectStore(PAGE_STORE)
+      const request = store.getAll()
+
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+  }
+
   async deletePagesByFolder(folderId: string): Promise<void> {
     const pages = await this.getPagesByFolder(folderId)
     const deletePromises = pages.map(page => this.deletePage(page.id))

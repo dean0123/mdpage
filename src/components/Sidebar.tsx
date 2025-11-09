@@ -22,8 +22,8 @@ const Sidebar = ({ onSelectPage, onSelectFolder, selectedFolderId: selectedFolde
     const savedState = storage.getState()
     return savedState.selectedFolderId
   })
-  const [folderWidth, setFolderWidth] = useState(250)
-  const [pageWidth, setPageWidth] = useState(250)
+  const [folderWidth, setFolderWidth] = useState(200)
+  const [pageWidth, setPageWidth] = useState(200)
   const [isResizingFolder, setIsResizingFolder] = useState(false)
   const [isResizingPage, setIsResizingPage] = useState(false)
 

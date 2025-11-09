@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { Folder, Page, db } from '../services/db'
 import { storage } from '../services/storage'
+import { exportFolder, selectAndImportFolder } from '../utils/folderImportExport'
+import { ensureRecycleFolderExists, RECYCLE_FOLDER_ID } from '../services/recycleBin'
+import { useToast } from '../hooks/useToast'
+import ToastContainer from './ToastContainer'
 
 interface FolderTreeProps {
   onSelectFolder: (folderId: string) => void
@@ -22,6 +26,10 @@ const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFol
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
   const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null)
   const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null)
+  const [showArchiveMenu, setShowArchiveMenu] = useState(false)
+
+  // Toast 通知
+  const toast = useToast()
 
   // Ref 用於引用 folder name 輸入框
   const folderInputRef = useRef<HTMLInputElement>(null)
@@ -46,6 +54,21 @@ const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFol
       }, 0)
     }
   }, [editingFolderId])
+
+  // 點擊外部關閉存檔選單
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (showArchiveMenu && !target.closest('.archive-dropdown')) {
+        setShowArchiveMenu(false)
+      }
+    }
+
+    if (showArchiveMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showArchiveMenu])
 
   const loadFolders = async () => {
     const allFolders = await db.getAllFolders()
@@ -111,38 +134,99 @@ const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFol
     setEditingFolderId(null)
   }
 
-  const handleDeleteFolder = async (folderId: string) => {
-    // 遞迴檢查此文件夾及其所有子文件夾是否有非空白頁面
-    const checkNonEmptyPages = async (id: string): Promise<boolean> => {
-      // 檢查當前文件夾的頁面
-      const pages = await db.getPagesByFolder(id)
-      const hasNonEmptyPage = pages.some(page => page.content.trim() !== '')
+  const handleExportFolder = async () => {
+    setShowArchiveMenu(false)
 
-      if (hasNonEmptyPage) {
-        return true
-      }
-
-      // 遞迴檢查子文件夾
-      const children = folders.filter(f => f.parentId === id)
-      for (const child of children) {
-        const childHasNonEmpty = await checkNonEmptyPages(child.id)
-        if (childHasNonEmpty) {
-          return true
-        }
-      }
-
-      return false
-    }
-
-    // 檢查是否有非空白頁面
-    const hasNonEmptyPages = await checkNonEmptyPages(folderId)
-
-    if (hasNonEmptyPages) {
-      alert('此檔案夾或其子檔案夾中包含非空白頁面，無法刪除。\n請先刪除或清空這些頁面。')
+    if (!selectedFolderId) {
+      toast.warning('請先選擇要匯出的檔案夾')
       return
     }
 
-    // 所有頁面都是空白的，可以直接刪除，不需要確認
+    try {
+      await exportFolder(selectedFolderId)
+      toast.success('匯出成功！')
+    } catch (error) {
+      toast.error(`匯出失敗：${(error as Error).message}`)
+    }
+  }
+
+  const handleImportFolder = async () => {
+    setShowArchiveMenu(false)
+
+    try {
+      // 確保 Recycle folder 存在
+      const recycleFolder = await ensureRecycleFolderExists()
+
+      selectAndImportFolder(
+        recycleFolder.id,
+        () => {
+          // 成功回調
+          toast.success('匯入成功！已導入到 Recycle 檔案夾')
+          loadFolders()
+
+          // 展開 Recycle folder
+          const newExpanded = new Set([...expandedFolders, RECYCLE_FOLDER_ID])
+          setExpandedFolders(newExpanded)
+          storage.saveExpandedFolders(Array.from(newExpanded))
+
+          // 選擇 Recycle folder
+          onSelectFolder(RECYCLE_FOLDER_ID)
+        },
+        (error) => {
+          // 錯誤回調
+          toast.error(`匯入失敗：${error.message}`)
+        }
+      )
+    } catch (error) {
+      toast.error(`匯入失敗：${(error as Error).message}`)
+    }
+  }
+
+  const handleDeleteFolder = async (folderId: string) => {
+    // **特殊處理：檢查是否為 Recycle folder 或其子 folder**
+    const { isRecycleFolderOrChild } = await import('../services/recycleBin')
+    const isRecycle = await isRecycleFolderOrChild(folderId)
+
+    if (!isRecycle) {
+      // 非 Recycle folder：檢查是否有非空白頁面
+      const checkNonEmptyPages = async (id: string): Promise<boolean> => {
+        // 檢查當前文件夾的頁面
+        const pages = await db.getPagesByFolder(id)
+        const hasNonEmptyPage = pages.some(page => page.content.trim() !== '')
+
+        if (hasNonEmptyPage) {
+          return true
+        }
+
+        // 遞迴檢查子文件夾
+        const children = folders.filter(f => f.parentId === id)
+        for (const child of children) {
+          const childHasNonEmpty = await checkNonEmptyPages(child.id)
+          if (childHasNonEmpty) {
+            return true
+          }
+        }
+
+        return false
+      }
+
+      // 檢查是否有非空白頁面
+      const hasNonEmptyPages = await checkNonEmptyPages(folderId)
+
+      if (hasNonEmptyPages) {
+        toast.warning('此檔案夾或其子檔案夾中包含非空白頁面，無法刪除。請先刪除或清空這些頁面。')
+        return
+      }
+    } else {
+      // Recycle folder 或其子 folder：直接刪除，需要確認
+      const folder = folders.find(f => f.id === folderId)
+      const folderName = folder?.name || '此檔案夾'
+      if (!confirm(`確定要刪除 "${folderName}" 及其所有內容嗎？\n（Recycle 檔案夾可直接刪除，不檢查內容）`)) {
+        return
+      }
+    }
+
+    // 可以刪除了
 
     // **在刪除前，記錄被刪除 folder 的信息**
     const deletedFolder = folders.find(f => f.id === folderId)
@@ -500,6 +584,35 @@ const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFol
         >
           新增檔案夾
         </button>
+
+        {/* 存檔按鈕和下拉選單 */}
+        <div className="archive-dropdown" style={{ marginLeft: 'auto' }}>
+          <button
+            className="folder-archive-btn"
+            onClick={() => setShowArchiveMenu(!showArchiveMenu)}
+            title="匯出/匯入檔案夾"
+          >
+            💾
+          </button>
+
+          {showArchiveMenu && (
+            <div className="archive-menu">
+              <button
+                className="archive-menu-item"
+                onClick={handleExportFolder}
+                disabled={!selectedFolderId}
+              >
+                📤 匯出檔案夾
+              </button>
+              <button
+                className="archive-menu-item"
+                onClick={handleImportFolder}
+              >
+                📥 匯入檔案夾
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       <div
         className={`folder-tree-content ${dragOverFolderId === 'root' ? 'drag-over-root' : ''}`}
@@ -514,6 +627,9 @@ const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFol
           rootFolders.map(folder => renderFolder(folder))
         )}
       </div>
+
+      {/* Toast 通知容器 */}
+      <ToastContainer toasts={toast.toasts} onRemove={toast.removeToast} />
     </div>
   )
 }

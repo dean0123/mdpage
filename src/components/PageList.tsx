@@ -379,7 +379,7 @@ const PageList = ({ folderId, onSelectPage, onSelectFolder, onFolderCreated, onP
                   className="page-name"
                   onClick={() => onSelectPage(page)}
                 >
-                  📄 {displayName}
+                  {displayName}
                 </span>
                 <div className="page-actions">
                   <button

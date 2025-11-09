@@ -39,7 +39,7 @@
 /* Sidebar Control */
 .sidebar-control {
   width: 50px;
-  background: #edf2f7;
+  background: #e2e8f0;
   border-right: 1px solid #e2e8f0;
   padding: 0.5rem;
   display: flex;
@@ -68,7 +68,7 @@
 
 /* Folder Sidebar */
 .sidebar-folder {
-  background: white;
+  background: #f0f4f8;
   border-right: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
@@ -78,7 +78,7 @@
 
 /* Page Sidebar */
 .sidebar-page {
-  background: white;
+  background: #f7fafc;
   display: flex;
   flex-direction: column;
   min-width: 150px;
@@ -137,6 +137,69 @@
   background: #3182ce;
 }
 
+/* Archive Dropdown */
+.archive-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.folder-archive-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #cbd5e0;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.folder-archive-btn:hover {
+  background: #edf2f7;
+  border-color: #a0aec0;
+}
+
+.archive-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.25rem;
+  background: white;
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  min-width: 160px;
+  padding: 0.25rem 0;
+}
+
+.archive-menu-item {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  border: none;
+  background: white;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: #4a5568;
+  transition: background 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.archive-menu-item:hover:not(:disabled) {
+  background: #f7fafc;
+}
+
+.archive-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .folder-tree-content {
   flex: 1;
   overflow-y: auto;
@@ -153,18 +216,18 @@
 .folder-item {
   display: flex;
   align-items: center;
-  padding: 0.5rem;
+  padding: 0.45rem 0.5rem;
   cursor: pointer;
   transition: background 0.15s ease;
   position: relative;
 }
 
 .folder-item:hover {
-  background: #f7fafc;
+  background: #e2e8f0;
 }
 
 .folder-item.selected {
-  background: #ebf8ff;
+  background: #cbd5e0;
 }
 
 .folder-item.dragging {
@@ -209,7 +272,7 @@
 }
 
 .folder-item:hover .folder-actions {
-  display: flex;
+  visibility: visible;
 }
 
 .folder-toggle {
@@ -242,7 +305,8 @@
 }
 
 .folder-actions {
-  display: none;
+  display: flex;
+  visibility: hidden;
   gap: 0.25rem;
   margin-left: 0.5rem;
 }
@@ -405,23 +469,24 @@
 .page-item {
   display: flex;
   align-items: center;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 1rem;
   cursor: pointer;
   transition: background 0.15s ease;
   position: relative;
+  border-left: 3px solid transparent;
 }
 
 .page-item:hover {
-  background: #f7fafc;
+  background: #edf2f7;
 }
 
 .page-item.selected {
-  background: #ebf8ff;
+  background: #e2e8f0;
   border-left: 3px solid #4299e1;
 }
 
 .page-item:hover .page-actions {
-  display: flex;
+  visibility: visible;
 }
 
 .page-name {
@@ -443,7 +508,8 @@
 }
 
 .page-actions {
-  display: none;
+  display: flex;
+  visibility: hidden;
   gap: 0.25rem;
   margin-left: 0.5rem;
 }
@@ -1031,4 +1097,95 @@
 
 .form-input::placeholder {
   color: #a0aec0;
+}
+
+/* Toast Notifications */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 400px;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  animation: slideIn 0.3s ease;
+  border-left: 4px solid #cbd5e0;
+}
+
+.toast:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.toast-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 0.875rem;
+  color: #2d3748;
+  line-height: 1.5;
+}
+
+.toast-close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1.25rem;
+  color: #a0aec0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.toast-close:hover {
+  background: #edf2f7;
+  color: #4a5568;
+}
+
+.toast-success {
+  border-left-color: #48bb78;
+}
+
+.toast-error {
+  border-left-color: #f56565;
+}
+
+.toast-warning {
+  border-left-color: #ed8936;
+}
+
+.toast-info {
+  border-left-color: #4299e1;
 }
