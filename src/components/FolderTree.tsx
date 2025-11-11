@@ -4,6 +4,9 @@ import { storage } from '../services/storage'
 import { exportFolder, selectAndImportFolder } from '../utils/folderImportExport'
 import { ensureRecycleFolderExists, RECYCLE_FOLDER_ID } from '../services/recycleBin'
 import { useToast } from '../hooks/useToast'
+import { useAuth } from '../contexts/AuthContext'
+import { syncManagerV2 } from '../services/syncV2/syncManagerV2'
+import { exportAllToLocal, importAllFromLocal } from '../utils/localExportImport'
 import ToastContainer from './ToastContainer'
 
 interface FolderTreeProps {
@@ -28,8 +31,17 @@ const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFol
   const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null)
   const [showArchiveMenu, setShowArchiveMenu] = useState(false)
 
-  // Toast 通知
+  // 同步進度
+  const [syncProgress, setSyncProgress] = useState<{
+    show: boolean
+    current: number
+    total: number
+    message: string
+  } | null>(null)
+
+  // Toast 通知 和 Auth
   const toast = useToast()
+  const { getAccessToken } = useAuth()
 
   // Ref 用於引用 folder name 輸入框
   const folderInputRef = useRef<HTMLInputElement>(null)
@@ -178,6 +190,122 @@ const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFol
         }
       )
     } catch (error) {
+      toast.error(`匯入失敗：${(error as Error).message}`)
+    }
+  }
+
+  // 匯出全部到雲端（全部取代 Drive）
+  const handleForceUploadAll = async () => {
+    setShowArchiveMenu(false)
+
+    const accessToken = getAccessToken()
+    if (!accessToken) {
+      toast.error('請先登入 Google Drive')
+      return
+    }
+
+    if (!confirm('確定要將本地所有數據上傳到雲端嗎？\n\n⚠️ 這會完全覆蓋 Drive 上的數據！')) {
+      return
+    }
+
+    try {
+      setSyncProgress({ show: true, current: 0, total: 100, message: '準備上傳...' })
+
+      const result = await syncManagerV2.forceUploadAll(accessToken, (current, total, message) => {
+        setSyncProgress({ show: true, current, total, message })
+      })
+
+      setSyncProgress(null)
+
+      if (result.success) {
+        toast.success('✅ 上傳完成！所有數據已同步到雲端')
+      } else {
+        toast.error(`上傳失敗：${result.errors.join(', ')}`)
+      }
+    } catch (error) {
+      setSyncProgress(null)
+      toast.error(`上傳失敗：${(error as Error).message}`)
+    }
+  }
+
+  // 從雲端全部匯入（全部取代本地）
+  const handleForceDownloadAll = async () => {
+    setShowArchiveMenu(false)
+
+    const accessToken = getAccessToken()
+    if (!accessToken) {
+      toast.error('請先登入 Google Drive')
+      return
+    }
+
+    if (!confirm('確定要從雲端下載所有數據嗎？\n\n⚠️ 這會完全覆蓋本地數據！')) {
+      return
+    }
+
+    try {
+      setSyncProgress({ show: true, current: 0, total: 100, message: '準備下載...' })
+
+      const result = await syncManagerV2.forceDownloadAll(accessToken, (current, total, message) => {
+        setSyncProgress({ show: true, current, total, message })
+      })
+
+      setSyncProgress(null)
+
+      if (result.success) {
+        toast.success('✅ 下載完成！所有數據已從雲端同步')
+        await loadFolders()
+        // 刷新整個頁面以確保 UI 更新
+        window.location.reload()
+      } else {
+        toast.error(`下載失敗：${result.errors.join(', ')}`)
+      }
+    } catch (error) {
+      setSyncProgress(null)
+      toast.error(`下載失敗：${(error as Error).message}`)
+    }
+  }
+
+  // 匯出全部到本地（ZIP 文件）
+  const handleExportAllToLocal = async () => {
+    setShowArchiveMenu(false)
+
+    try {
+      setSyncProgress({ show: true, current: 0, total: 100, message: '準備匯出...' })
+
+      await exportAllToLocal((current, total, message) => {
+        setSyncProgress({ show: true, current, total, message })
+      })
+
+      setSyncProgress(null)
+      toast.success('✅ 匯出完成！文件已下載到預設下載目錄')
+    } catch (error) {
+      setSyncProgress(null)
+      toast.error(`匯出失敗：${(error as Error).message}`)
+    }
+  }
+
+  // 從本地匯入全部（ZIP 文件）
+  const handleImportAllFromLocal = async () => {
+    setShowArchiveMenu(false)
+
+    if (!confirm('確定要從本地文件匯入所有數據嗎？\n\n⚠️ 這會完全覆蓋本地數據！')) {
+      return
+    }
+
+    try {
+      setSyncProgress({ show: true, current: 0, total: 100, message: '準備匯入...' })
+
+      await importAllFromLocal((current, total, message) => {
+        setSyncProgress({ show: true, current, total, message })
+      })
+
+      setSyncProgress(null)
+      toast.success('✅ 匯入完成！所有數據已從文件恢復')
+      await loadFolders()
+      // 刷新整個頁面以確保 UI 更新
+      window.location.reload()
+    } catch (error) {
+      setSyncProgress(null)
       toast.error(`匯入失敗：${(error as Error).message}`)
     }
   }
@@ -610,6 +738,36 @@ const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFol
               >
                 📥 匯入檔案夾
               </button>
+              <div style={{ borderTop: '1px solid #e5e7eb', margin: '4px 0' }} />
+              <button
+                className="archive-menu-item"
+                onClick={handleExportAllToLocal}
+                style={{ color: '#10b981' }}
+              >
+                💾 匯出全部到本地
+              </button>
+              <button
+                className="archive-menu-item"
+                onClick={handleImportAllFromLocal}
+                style={{ color: '#10b981' }}
+              >
+                📂 從本地匯入全部
+              </button>
+              <div style={{ borderTop: '1px solid #e5e7eb', margin: '4px 0' }} />
+              <button
+                className="archive-menu-item"
+                onClick={handleForceUploadAll}
+                style={{ color: '#ef4444' }}
+              >
+                ☁️ 匯出全部到雲端
+              </button>
+              <button
+                className="archive-menu-item"
+                onClick={handleForceDownloadAll}
+                style={{ color: '#3b82f6' }}
+              >
+                📲 從雲端全部匯入
+              </button>
             </div>
           )}
         </div>
@@ -630,6 +788,67 @@ const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFol
 
       {/* Toast 通知容器 */}
       <ToastContainer toasts={toast.toasts} onRemove={toast.removeToast} />
+
+      {/* 同步進度對話框 */}
+      {syncProgress && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '8px',
+              padding: '24px',
+              minWidth: '400px',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+            }}
+          >
+            <div style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px', color: '#111827' }}>
+              同步進度
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <div
+                style={{
+                  width: '100%',
+                  height: '24px',
+                  backgroundColor: '#e5e7eb',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${(syncProgress.current / syncProgress.total) * 100}%`,
+                    height: '100%',
+                    backgroundColor: '#3b82f6',
+                    transition: 'width 0.3s ease',
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '8px' }}>
+              {syncProgress.current} / {syncProgress.total}
+            </div>
+
+            <div style={{ fontSize: '14px', color: '#374151' }}>
+              {syncProgress.message}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import FolderTree from './FolderTree'
 import PageList from './PageList'
+import { GoogleSignInButton } from './auth/GoogleSignInButton'
+import { UserProfile } from './auth/UserProfile'
+import { useAuth } from '../contexts/AuthContext'
 import { Page, db } from '../services/db'
 import { storage } from '../services/storage'
 
@@ -16,6 +19,7 @@ interface SidebarProps {
 type SidebarMode = 'full' | 'pageOnly' | 'hidden'
 
 const Sidebar = ({ onSelectPage, onSelectFolder, selectedFolderId: selectedFolderIdFromParent, selectedPageId, selectedPage, refreshTrigger }: SidebarProps) => {
+  const { isSignedIn } = useAuth()
   const [mode, setMode] = useState<SidebarMode>('full')
   // 內部的 selectedFolderId，用於顯示
   const [internalSelectedFolderId, setInternalSelectedFolderId] = useState<string | null>(() => {
@@ -158,6 +162,11 @@ const Sidebar = ({ onSelectPage, onSelectFolder, selectedFolderId: selectedFolde
         >
           📁
         </button>
+
+        {/* Google 認證按鈕 - 固定在控制區底部 */}
+        <div style={{ marginTop: 'auto' }}>
+          {isSignedIn ? <UserProfile /> : <GoogleSignInButton />}
+        </div>
       </div>
 
       {/* Folder 區塊 */}

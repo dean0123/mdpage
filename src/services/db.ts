@@ -7,6 +7,9 @@ export interface Folder {
   order: number // 用於排序
   createdAt: number
   updatedAt: number
+  // Google Drive 同步欄位（可選，向後兼容）
+  driveFileId?: string // Drive 上對應的文件 ID
+  lastSyncedAt?: number // 上次同步時間戳
 }
 
 export interface Page {
@@ -23,10 +26,22 @@ export interface Page {
   }
 }
 
+export interface DeletedFolder {
+  folderId: string
+  deletedAt: number
+}
+
+export interface DeletedPage {
+  pageId: string
+  deletedAt: number
+}
+
 const DB_NAME = 'MarkdownEditorDB'
-const DB_VERSION = 1
+const DB_VERSION = 2  // V2: 添加刪除追蹤
 const FOLDER_STORE = 'folders'
 const PAGE_STORE = 'pages'
+const DELETED_FOLDERS_STORE = 'deletedFolders'
+const DELETED_PAGES_STORE = 'deletedPages'
 
 class DatabaseService {
   private db: IDBDatabase | null = null
@@ -54,6 +69,15 @@ class DatabaseService {
         if (!db.objectStoreNames.contains(PAGE_STORE)) {
           const pageStore = db.createObjectStore(PAGE_STORE, { keyPath: 'id' })
           pageStore.createIndex('folderId', 'folderId', { unique: false })
+        }
+
+        // V2: 創建刪除追蹤存儲
+        if (!db.objectStoreNames.contains(DELETED_FOLDERS_STORE)) {
+          db.createObjectStore(DELETED_FOLDERS_STORE, { keyPath: 'folderId' })
+        }
+
+        if (!db.objectStoreNames.contains(DELETED_PAGES_STORE)) {
+          db.createObjectStore(DELETED_PAGES_STORE, { keyPath: 'pageId' })
         }
       }
     })
@@ -88,6 +112,31 @@ class DatabaseService {
   }
 
   async deleteFolder(id: string): Promise<void> {
+    // 先記錄刪除（如果失敗，跳過）
+    try {
+      await this.addDeletedFolder(id)
+    } catch (error) {
+      console.warn('Failed to record deleted folder (DB not upgraded?), continuing with delete:', error)
+    }
+
+    // 再刪除 folder
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([FOLDER_STORE], 'readwrite')
+      const store = transaction.objectStore(FOLDER_STORE)
+      const request = store.delete(id)
+
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  /**
+   * 靜默刪除 folder（不記錄刪除記錄）
+   * 用於同步邏輯：從 Drive 下載刪除記錄後執行刪除
+   */
+  async silentDeleteFolder(id: string): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.db) return reject(new Error('Database not initialized'))
 
@@ -169,6 +218,31 @@ class DatabaseService {
   }
 
   async deletePage(id: string): Promise<void> {
+    // 先記錄刪除（如果失敗，跳過）
+    try {
+      await this.addDeletedPage(id)
+    } catch (error) {
+      console.warn('Failed to record deleted page (DB not upgraded?), continuing with delete:', error)
+    }
+
+    // 再刪除 page
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([PAGE_STORE], 'readwrite')
+      const store = transaction.objectStore(PAGE_STORE)
+      const request = store.delete(id)
+
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  /**
+   * 靜默刪除 page（不記錄刪除記錄）
+   * 用於同步邏輯：從 Drive 下載刪除記錄後執行刪除
+   */
+  async silentDeletePage(id: string): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.db) return reject(new Error('Database not initialized'))
 
@@ -225,6 +299,122 @@ class DatabaseService {
     const pages = await this.getPagesByFolder(folderId)
     const deletePromises = pages.map(page => this.deletePage(page.id))
     await Promise.all(deletePromises)
+  }
+
+  // ===== DeletedFolder 操作 =====
+
+  async addDeletedFolder(folderId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([DELETED_FOLDERS_STORE], 'readwrite')
+      const store = transaction.objectStore(DELETED_FOLDERS_STORE)
+      const deletedFolder: DeletedFolder = {
+        folderId,
+        deletedAt: Date.now()
+      }
+      const request = store.put(deletedFolder)
+
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async removeDeletedFolder(folderId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([DELETED_FOLDERS_STORE], 'readwrite')
+      const store = transaction.objectStore(DELETED_FOLDERS_STORE)
+      const request = store.delete(folderId)
+
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getAllDeletedFolders(): Promise<DeletedFolder[]> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([DELETED_FOLDERS_STORE], 'readonly')
+      const store = transaction.objectStore(DELETED_FOLDERS_STORE)
+      const request = store.getAll()
+
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async clearDeletedFolders(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([DELETED_FOLDERS_STORE], 'readwrite')
+      const store = transaction.objectStore(DELETED_FOLDERS_STORE)
+      const request = store.clear()
+
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  // ===== DeletedPage 操作 =====
+
+  async addDeletedPage(pageId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([DELETED_PAGES_STORE], 'readwrite')
+      const store = transaction.objectStore(DELETED_PAGES_STORE)
+      const deletedPage: DeletedPage = {
+        pageId,
+        deletedAt: Date.now()
+      }
+      const request = store.put(deletedPage)
+
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async removeDeletedPage(pageId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([DELETED_PAGES_STORE], 'readwrite')
+      const store = transaction.objectStore(DELETED_PAGES_STORE)
+      const request = store.delete(pageId)
+
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getAllDeletedPages(): Promise<DeletedPage[]> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([DELETED_PAGES_STORE], 'readonly')
+      const store = transaction.objectStore(DELETED_PAGES_STORE)
+      const request = store.getAll()
+
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async clearDeletedPages(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([DELETED_PAGES_STORE], 'readwrite')
+      const store = transaction.objectStore(DELETED_PAGES_STORE)
+      const request = store.clear()
+
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
   }
 }
 
