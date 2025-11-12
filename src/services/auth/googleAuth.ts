@@ -227,9 +227,17 @@ class GoogleAuthService {
     }
 
     try {
-      // 使用空的 prompt 進行靜默刷新（不會彈出視窗）
-      this.tokenClient.requestAccessToken({ prompt: '' })
-      console.log('Token 靜默刷新成功')
+      // 獲取當前用戶的 email，作為 hint 參數
+      const userInfo = tokenManager.getUserInfo()
+      const hint = userInfo?.email || ''
+
+      // 使用空的 prompt 和 hint 進行靜默刷新（不會彈出視窗）
+      // hint 參數告訴 Google 要為哪個用戶刷新，避免彈出選擇帳號畫面
+      this.tokenClient.requestAccessToken({
+        prompt: '',
+        hint: hint
+      })
+      console.log('Token 靜默刷新成功 (用戶:', hint, ')')
     } catch (error) {
       console.error('Token 靜默刷新失敗:', error)
       // 如果靜默刷新失敗，用戶下次操作時會被要求重新登入

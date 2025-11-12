@@ -36,12 +36,22 @@ export interface DeletedPage {
   deletedAt: number
 }
 
+export interface ImageData {
+  id: string          // 唯一標識符，例如 img-1234567890
+  blob: Blob          // 圖片二進制數據
+  filename: string    // 原始文件名
+  mimeType: string    // MIME 類型，例如 'image/png'
+  size: number        // 文件大小（字節）
+  createdAt: number   // 創建時間戳
+}
+
 const DB_NAME = 'MarkdownEditorDB'
-const DB_VERSION = 2  // V2: 添加刪除追蹤
+const DB_VERSION = 3  // V3: 添加圖片存儲
 const FOLDER_STORE = 'folders'
 const PAGE_STORE = 'pages'
 const DELETED_FOLDERS_STORE = 'deletedFolders'
 const DELETED_PAGES_STORE = 'deletedPages'
+const IMAGE_STORE = 'images'
 
 class DatabaseService {
   private db: IDBDatabase | null = null
@@ -78,6 +88,11 @@ class DatabaseService {
 
         if (!db.objectStoreNames.contains(DELETED_PAGES_STORE)) {
           db.createObjectStore(DELETED_PAGES_STORE, { keyPath: 'pageId' })
+        }
+
+        // V3: 創建圖片存儲
+        if (!db.objectStoreNames.contains(IMAGE_STORE)) {
+          db.createObjectStore(IMAGE_STORE, { keyPath: 'id' })
         }
       }
     })
@@ -413,6 +428,60 @@ class DatabaseService {
       const request = store.clear()
 
       request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  // ===== Image 操作 =====
+
+  async saveImage(imageData: ImageData): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([IMAGE_STORE], 'readwrite')
+      const store = transaction.objectStore(IMAGE_STORE)
+      const request = store.put(imageData)
+
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getImage(id: string): Promise<ImageData | undefined> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([IMAGE_STORE], 'readonly')
+      const store = transaction.objectStore(IMAGE_STORE)
+      const request = store.get(id)
+
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async deleteImage(id: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([IMAGE_STORE], 'readwrite')
+      const store = transaction.objectStore(IMAGE_STORE)
+      const request = store.delete(id)
+
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getAllImages(): Promise<ImageData[]> {
+    return new Promise((resolve, reject) => {
+      if (!this.db) return reject(new Error('Database not initialized'))
+
+      const transaction = this.db.transaction([IMAGE_STORE], 'readonly')
+      const store = transaction.objectStore(IMAGE_STORE)
+      const request = store.getAll()
+
+      request.onsuccess = () => resolve(request.result)
       request.onerror = () => reject(request.error)
     })
   }

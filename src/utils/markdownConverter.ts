@@ -135,6 +135,15 @@ export const getMarkdownFromEditor = (editorInstance: any): string => {
       return '  \n'  // Markdown 硬换行：两个空格 + 换行
     }
 
+    if (node.type === 'image') {
+      const src = node.attrs?.src || ''
+      const alt = node.attrs?.alt || ''
+
+      // 只保存基本 Markdown 語法
+      // 屬性（width, shadow）會保存在 Tiptap 的 JSON 中，不需要在 Markdown 中顯示
+      return `![${alt}](${src})`
+    }
+
     if (node.type === 'table') {
       return convertTableToMarkdown(node)
     }

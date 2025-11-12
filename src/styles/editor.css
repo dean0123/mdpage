@@ -1026,6 +1026,33 @@
   color: #3182ce;
 }
 
+/* Image styles */
+.ProseMirror img.editor-image {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1em 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* 圖片陰影 - 預設啟用 */
+.ProseMirror img.editor-image[data-shadow="true"] {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+              0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* 圖片陰影 - hover 效果 */
+.ProseMirror img.editor-image[data-shadow="true"]:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+              0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* 無陰影 */
+.ProseMirror img.editor-image[data-shadow="false"] {
+  box-shadow: none;
+}
+
 /* Table styles */
 .ProseMirror table {
   border-collapse: collapse;

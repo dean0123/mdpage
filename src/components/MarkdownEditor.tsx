@@ -6,6 +6,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
 import Code from '@tiptap/extension-code'
 import CodeBlock from '@tiptap/extension-code-block'
+import Image from '@tiptap/extension-image'
 import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
@@ -87,11 +88,17 @@ const MarkdownEditor = () => {
   const [isMarkdownMode, setIsMarkdownMode] = useState(false)
   const [showTableMenu, setShowTableMenu] = useState(false)
   const [showLinkDialog, setShowLinkDialog] = useState(false)
+  const [showImageMenu, setShowImageMenu] = useState(false)
+  const [imageMenuPosition, setImageMenuPosition] = useState({ x: 0, y: 0 })
+  const [selectedImageNode, setSelectedImageNode] = useState<HTMLImageElement | null>(null)
   const [linkUrl, setLinkUrl] = useState('')
   const [linkText, setLinkText] = useState('')
   const [currentPage, setCurrentPage] = useState<Page | null>(null)
   const [dbInitialized, setDbInitialized] = useState(false)
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
+
+  // 圖片 ID 到 blob URL 的映射
+  const imageBlobUrlMap = useRef<Map<string, string>>(new Map())
 
   // 刷新觸發器：用於通知 Sidebar 刷新 FolderTree 和 PageList
   const [triggerRefresh, setTriggerRefresh] = useState(0)
@@ -238,22 +245,27 @@ const MarkdownEditor = () => {
         },
       }),
       Placeholder.configure({
-        placeholder: `開始輸入你的 Pages 內容
+        placeholder: `⬆。 綠色按鈕可以輸入/查看 Markdown 本文原碼
+        開始直接輸入你的 Pages 內容
+        所見即所得 WYSIWYG Markdown 編輯器
 
-所見即所得 WYSIWYG Markdown 編輯器
-      # 空格     為大字 H1
-      ## 空格   為中字 H2
-      - 空格      為列表
-      1.              為數字列表
-      >              為註解
-      ---           三橫線為分割線
-      \`\`\`           三個反單引號(前後)為代碼
-      行尾兩個空格    為換行
+        # 空格        大標題 H1
+        ## 空格      中標題 H2
+        ### 空格    小標題 H3
+        >                 為註解
+ 
+        - 空格         為列表
+        1.                 為數字列表
+        -[ ]  -[x]     ToDo 待辦事項
+                       
+        ---              三橫線為分割線
+        \`\`\`              三個反單引號(前後)為代碼
+        行尾兩個空格       可同段換行
 
-使用工具欄按鈕或鍵盤快捷鍵：
-      **粗體** （Cmd/Ctrl + B）
-      *斜體*     （Cmd/Ctrl + I）
-      \`代碼\`     （Cmd/Ctrl + E）
+      使用工具欄按鈕或鍵盤快捷鍵：
+     **粗體**      （Cmd/Ctrl + B）
+       *斜體*        （Cmd/Ctrl + I）
+       \`代碼\`        （Cmd/Ctrl + E）
         `,
       }),
       Link.configure({
@@ -261,6 +273,61 @@ const MarkdownEditor = () => {
         HTMLAttributes: {
           target: '_blank',
           rel: 'noopener noreferrer',
+        },
+      }),
+      Image.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            src: {
+              default: null,
+              parseHTML: element => {
+                // 保存原始的 image:// URL
+                return element.getAttribute('src') || element.getAttribute('data-src')
+              },
+              renderHTML: attributes => {
+                if (!attributes.src) return {}
+
+                // 如果是 image:// 協議，暫時返回空的 data URL，稍後通過 useEffect 轉換
+                if (attributes.src.startsWith('image://')) {
+                  return {
+                    'data-src': attributes.src,
+                    src: 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\'%3E%3Crect fill=\'%23f0f0f0\' width=\'100\' height=\'100\'/%3E%3C/svg%3E'
+                  }
+                }
+
+                return { src: attributes.src }
+              },
+            },
+            alt: {
+              default: null,
+              parseHTML: element => element.getAttribute('alt'),
+              renderHTML: attributes => {
+                if (!attributes.alt) return {}
+                return { alt: attributes.alt }
+              },
+            },
+            width: {
+              default: null,
+              parseHTML: element => element.getAttribute('width'),
+              renderHTML: attributes => {
+                if (!attributes.width) return {}
+                return { width: attributes.width }
+              },
+            },
+            'data-shadow': {
+              default: 'true',
+              parseHTML: element => element.getAttribute('data-shadow'),
+              renderHTML: attributes => {
+                return { 'data-shadow': attributes['data-shadow'] || 'true' }
+              },
+            },
+          }
+        },
+      }).configure({
+        inline: true,
+        HTMLAttributes: {
+          class: 'editor-image',
         },
       }),
       Table.configure({
@@ -300,6 +367,11 @@ const MarkdownEditor = () => {
             // 快捷輸入：-[ → 空的 checkbox
             wrappingInputRule({
               find: /^-\[\s$/,
+              type: this.type,
+              getAttributes: () => ({ checked: false }),
+            }),
+            wrappingInputRule({
+              find: /^-\【\s$/,
               type: this.type,
               getAttributes: () => ({ checked: false }),
             }),
@@ -372,6 +444,39 @@ const MarkdownEditor = () => {
       handleDOMEvents: {
         focus: () => {
           handleEditorFocus()
+          return false
+        },
+        paste: (view, event) => {
+          // 處理圖片貼上
+          const items = event.clipboardData?.items
+          if (!items) return false
+
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i]
+            if (item.type.startsWith('image/')) {
+              event.preventDefault()
+              const file = item.getAsFile()
+              if (file) {
+                handleImageUpload(file)
+              }
+              return true
+            }
+          }
+          return false
+        },
+        drop: (view, event) => {
+          // 處理圖片拖放
+          const files = event.dataTransfer?.files
+          if (!files || files.length === 0) return false
+
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i]
+            if (file.type.startsWith('image/')) {
+              event.preventDefault()
+              handleImageUpload(file)
+              return true
+            }
+          }
           return false
         },
       },
@@ -562,6 +667,194 @@ const MarkdownEditor = () => {
       }, 0)
     }
   }
+
+  // 圖片壓縮函數
+  const compressImage = async (file: File): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = document.createElement('img')
+      const reader = new FileReader()
+
+      reader.onload = (e) => {
+        img.src = e.target?.result as string
+      }
+
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error('無法創建 Canvas'))
+          return
+        }
+
+        // 計算新尺寸（最大 1024px）
+        let width = img.width
+        let height = img.height
+        const maxSize = 1024
+
+        if (width > maxSize || height > maxSize) {
+          if (width > height) {
+            height = (height * maxSize) / width
+            width = maxSize
+          } else {
+            width = (width * maxSize) / height
+            height = maxSize
+          }
+        }
+
+        canvas.width = width
+        canvas.height = height
+
+        // 繪製圖片
+        ctx.drawImage(img, 0, 0, width, height)
+
+        // 轉換為 Blob
+        // 注意：某些格式（如 GIF）可能不支持，統一轉為 JPEG 或 PNG
+        const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+        const quality = mimeType === 'image/jpeg' ? 0.85 : undefined
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(blob)
+            } else {
+              reject(new Error('圖片壓縮失敗：無法轉換為 Blob'))
+            }
+          },
+          mimeType,
+          quality
+        )
+      }
+
+      img.onerror = () => reject(new Error('圖片載入失敗'))
+      reader.onerror = () => reject(new Error('文件讀取失敗'))
+
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // 處理圖片上傳
+  const handleImageUpload = async (file: File) => {
+    try {
+      console.log('開始上傳圖片:', file.name, file.type, (file.size / 1024).toFixed(2), 'KB')
+
+      if (!editor) {
+        console.error('編輯器未初始化')
+        alert('編輯器未準備好，請稍後再試')
+        return
+      }
+
+      // 檢查文件類型
+      if (!file.type.startsWith('image/')) {
+        console.error('不是圖片文件:', file.type)
+        alert('請選擇圖片文件')
+        return
+      }
+
+      // 檢查文件大小（限制 10MB）
+      const maxSize = 10 * 1024 * 1024
+      if (file.size > maxSize) {
+        console.error('文件太大:', file.size)
+        alert('圖片大小不能超過 10MB')
+        return
+      }
+
+      // 壓縮圖片
+      console.log('開始壓縮圖片...')
+      const compressedBlob = await compressImage(file)
+      console.log('壓縮完成 - 原始:', (file.size / 1024).toFixed(2), 'KB, 壓縮後:', (compressedBlob.size / 1024).toFixed(2), 'KB')
+
+      // 生成唯一 ID
+      const imageId = `img-${Date.now()}`
+
+      // 保存到 IndexedDB
+      const imageData = {
+        id: imageId,
+        blob: compressedBlob,
+        filename: file.name,
+        mimeType: file.type,
+        size: compressedBlob.size,
+        createdAt: Date.now(),
+      }
+
+      await db.saveImage(imageData)
+
+      // 創建 blob URL 用於即時顯示
+      const blobUrl = URL.createObjectURL(compressedBlob)
+
+      // 保存到映射表
+      imageBlobUrlMap.current.set(imageId, blobUrl)
+
+      // 插入圖片到編輯器，使用自定義協議，預設添加陰影
+      editor.chain().focus().setImage({
+        src: `image://${imageId}`,
+        alt: file.name,
+        'data-shadow': 'true',
+      }).run()
+
+      console.log('圖片上傳成功:', imageId, '映射表大小:', imageBlobUrlMap.current.size)
+    } catch (error) {
+      console.error('圖片上傳失敗:', error)
+      const errorMessage = error instanceof Error ? error.message : '未知錯誤'
+      alert(`圖片上傳失敗: ${errorMessage}`)
+    }
+  }
+
+  // 處理 image:// URL 轉換為 blob URL
+  useEffect(() => {
+    if (!editor) return
+
+    const convertImageUrls = async () => {
+      // 查找所有使用 data-src 的圖片（image:// 協議）
+      const images = document.querySelectorAll('img[data-src^="image://"]')
+
+      for (const imgElement of images) {
+        const img = imgElement as HTMLImageElement
+        const dataSrc = img.getAttribute('data-src')
+        if (!dataSrc) continue
+
+        const imageId = dataSrc.replace('image://', '')
+
+        // 首先檢查映射表
+        let blobUrl = imageBlobUrlMap.current.get(imageId)
+
+        if (!blobUrl) {
+          // 從 IndexedDB 讀取圖片
+          try {
+            const imageData = await db.getImage(imageId)
+            if (imageData) {
+              blobUrl = URL.createObjectURL(imageData.blob)
+              imageBlobUrlMap.current.set(imageId, blobUrl)
+              console.log('從 IndexedDB 載入圖片:', imageId)
+            } else {
+              console.warn('圖片不存在:', imageId)
+              continue
+            }
+          } catch (error) {
+            console.error('無法載入圖片:', imageId, error)
+            continue
+          }
+        }
+
+        // 設置 blob URL
+        if (blobUrl) {
+          img.src = blobUrl
+        }
+      }
+    }
+
+    // 初始轉換
+    setTimeout(() => convertImageUrls(), 100)
+
+    // 監聽編輯器更新
+    const handleUpdate = () => {
+      setTimeout(() => convertImageUrls(), 50)
+    }
+
+    editor.on('update', handleUpdate)
+    return () => {
+      editor.off('update', handleUpdate)
+    }
+  }, [editor, currentPage])
 
   const handleSelectFolder = (folderId: string) => {
     // 如果傳入空字符串，表示沒有選中的 folder（回到初始化狀態）
@@ -847,6 +1140,27 @@ const MarkdownEditor = () => {
             🔗
           </button>
 
+          {/* Image */}
+          <button
+            onClick={() => {
+              const input = document.createElement('input')
+              input.type = 'file'
+              input.accept = 'image/*'
+              input.onchange = (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0]
+                if (file) {
+                  handleImageUpload(file)
+                }
+              }
+              input.click()
+            }}
+            disabled={isMarkdownMode}
+            className="toolbar-button"
+            title="插入圖片"
+          >
+            🖼️
+          </button>
+
           {/* Table */}
           <div className="toolbar-dropdown">
             <button
@@ -956,7 +1270,7 @@ const MarkdownEditor = () => {
             className="markdown-source-editor"
             value={markdownText}
             onChange={(e) => setMarkdownText(e.target.value)}
-            placeholder="在此編輯 Markdown 源碼..."
+            placeholder="在此 編輯 或 貼上 Markdown 本文原碼..."
           />
         ) : (
           <div ref={editorScrollRef} className="editor-scroll-container">
