@@ -373,11 +373,9 @@ const PageList = ({ folderId, onSelectPage, onSelectFolder, onFolderCreated, sel
               <div
                 key={page.id}
                 className={`page-item ${isSelected ? 'selected' : ''}`}
+                onClick={() => onSelectPage(page)}
               >
-                <span
-                  className="page-name"
-                  onClick={() => onSelectPage(page)}
-                >
+                <span className="page-name">
                   {displayName}
                 </span>
                 <div className="page-actions">

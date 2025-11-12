@@ -39,6 +39,11 @@ class GoogleAuthService {
       // 初始化 GIS (Google Identity Services)
       await this.initializeGisClient()
 
+      // 註冊 token 自動刷新回調
+      tokenManager.setRefreshCallback(() => {
+        this.refreshToken()
+      })
+
       // 檢查是否有已存在的 token
       this.checkExistingAuth()
 
@@ -207,6 +212,30 @@ class GoogleAuthService {
 
     // 請求 token（會彈出 OAuth 視窗）
     this.tokenClient.requestAccessToken({ prompt: 'consent' })
+  }
+
+  /**
+   * 靜默刷新 Token（不會彈出視窗）
+   */
+  private async refreshToken(): Promise<void> {
+    if (!this.gisInited) {
+      console.error('Cannot refresh token: GIS not initialized')
+      return
+    }
+
+    try {
+      // 使用空的 prompt 進行靜默刷新（不會彈出視窗）
+      this.tokenClient.requestAccessToken({ prompt: '' })
+      console.log('Token 靜默刷新成功')
+    } catch (error) {
+      console.error('Token 靜默刷新失敗:', error)
+      // 如果靜默刷新失敗，用戶下次操作時會被要求重新登入
+      this.updateAuthState({
+        isSignedIn: false,
+        user: null,
+        error: '登入已過期，請重新登入',
+      })
+    }
   }
 
   /**

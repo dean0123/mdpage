@@ -613,10 +613,17 @@ const FolderTree = ({ onSelectFolder, onFolderDeleted, selectedFolderId, refresh
           onDragOver={(e) => handleDragOver(e, folder.id)}
           onDrop={(e) => handleDrop(e, folder.id)}
           onDragEnd={handleDragEnd}
+          onClick={() => !isEditing && onSelectFolder(folder.id)}
         >
           <span
             className="folder-toggle"
-            onClick={() => toggleFolder(folder.id)}
+            onClick={(e) => {
+              // 只有在有子文件夾時才阻止冒泡和切換展開狀態
+              if (children.length > 0) {
+                e.stopPropagation()
+                toggleFolder(folder.id)
+              }
+            }}
           >
             {children.length > 0 ? (isExpanded ? '▼' : '▶') : '　'}
           </span>
@@ -644,28 +651,30 @@ const FolderTree = ({ onSelectFolder, onFolderDeleted, selectedFolderId, refresh
                   setEditingFolderId(null)
                 }
               }}
+              onClick={(e) => e.stopPropagation()}
               autoFocus
             />
           ) : (
             <>
               <span className="folder-icon">📁</span>
-              <span
-                className="folder-name"
-                onClick={() => onSelectFolder(folder.id)}
-              >
+              <span className="folder-name">
                 {folder.name}
               </span>
               <div className="folder-actions">
                 <button
                   className="folder-action-btn"
-                  onClick={() => handleCreateFolder(folder.id)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleCreateFolder(folder.id)
+                  }}
                   title="新增子檔案夾"
                 >
                   +
                 </button>
                 <button
                   className="folder-action-btn"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation()
                     setEditingFolderId(folder.id)
                     setEditingName(folder.name)
                   }}
@@ -675,7 +684,10 @@ const FolderTree = ({ onSelectFolder, onFolderDeleted, selectedFolderId, refresh
                 </button>
                 <button
                   className="folder-action-btn folder-delete-btn"
-                  onClick={() => handleDeleteFolder(folder.id)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleDeleteFolder(folder.id)
+                  }}
                   title="刪除"
                 >
                   ✕

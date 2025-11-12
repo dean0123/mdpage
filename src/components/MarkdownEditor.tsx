@@ -3,10 +3,13 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
+import Code from '@tiptap/extension-code'
 import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
 import { marked } from 'marked'
 import Sidebar from './Sidebar'
 import LinkDialog from './editor/LinkDialog'
@@ -14,7 +17,6 @@ import { db, Page } from '../services/db'
 import { storage } from '../services/storage'
 import { ensureFolderAndPage } from '../services/pageHelper'
 import { getMarkdownFromEditor, extractPageTitle } from '../utils/markdownConverter'
-import { exportMarkdownFile, importMarkdownFile } from '../utils/fileOperations'
 import '../styles/editor.css'
 
 // 輔助函數：將 Markdown 轉換為 HTML，並修復 marked 在 code block 末尾添加的換行符
@@ -154,7 +156,17 @@ const MarkdownEditor = () => {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        code: false, // 禁用 StarterKit 的默認 code，我們將自定義配置
+      }),
+      Code.extend({
+        // 允許 code 與其他 marks（如 link）共存
+        excludes: '',
+      }).configure({
+        HTMLAttributes: {
+          class: 'inline-code',
+        },
+      }),
       Placeholder.configure({
         placeholder: `開始輸入你的 Pages 內容
 
@@ -187,6 +199,10 @@ const MarkdownEditor = () => {
       TableRow,
       TableHeader,
       TableCell,
+      TaskList,
+      TaskItem.configure({
+        nested: true,
+      }),
     ],
     content: markdownToHtml(initialMarkdown),
     editorProps: {
@@ -319,43 +335,6 @@ const MarkdownEditor = () => {
     }
   }
 
-  const handleExportMarkdown = () => {
-    // markdownText 始終是最新的
-    exportMarkdownFile(markdownText)
-  }
-
-  const handleImportMarkdown = () => {
-    importMarkdownFile((content) => {
-      // 設置 Markdown 文本（主要數據源）
-      setMarkdownText(content)
-
-      if (!isMarkdownMode) {
-        // 如果在 WYSIWYG 模式，同步更新編輯器
-        isSyncingFromMarkdown.current = true
-        const html = markdownToHtml(content)
-        editor?.commands.setContent(html)
-        setTimeout(() => {
-          isSyncingFromMarkdown.current = false
-        }, 0)
-      }
-    })
-  }
-
-  const handleClearEditor = () => {
-    if (confirm('確定要清空所有內容嗎？')) {
-      // 清空 Markdown 文本（主要數據源）
-      setMarkdownText('')
-
-      if (!isMarkdownMode) {
-        // 如果在 WYSIWYG 模式，同步清空編輯器
-        isSyncingFromMarkdown.current = true
-        editor?.commands.clearContent()
-        setTimeout(() => {
-          isSyncingFromMarkdown.current = false
-        }, 0)
-      }
-    }
-  }
 
   const handleSelectPage = async (page: Page) => {
     // 如果選擇的是空頁面（刪除頁面時），清空編輯器
@@ -570,6 +549,14 @@ const MarkdownEditor = () => {
       <div className="editor-container">
         <div className="editor-wrapper">
         <div className="toolbar">
+          <button
+            onClick={handleToggleMarkdownMode}
+            className={isMarkdownMode ? 'toolbar-button toolbar-button-md is-active' : 'toolbar-button toolbar-button-md'}
+            title={isMarkdownMode ? '切換到 WYSIWYG 模式' : '切換到 Markdown 源碼模式'}
+          >
+            MD⬇
+          </button>
+          
           {/* Undo/Redo */}
           <button
             onClick={() => editor.chain().focus().undo().run()}
@@ -659,6 +646,14 @@ const MarkdownEditor = () => {
             title="有序列表"
           >
             1.
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleTaskList().run()}
+            disabled={isMarkdownMode}
+            className={editor.isActive('taskList') ? 'toolbar-button is-active' : 'toolbar-button'}
+            title="待辦事項列表"
+          >
+            ☑
           </button>
 
           {/* Blockquote */}
@@ -792,49 +787,15 @@ const MarkdownEditor = () => {
 
           <div className="toolbar-divider"></div>
 
-          {/* File operations */}
-
-          {/* Sync Button */}
-          <button
-            onClick={handleManualSync}
-            className={`toolbar-button toolbar-button-sync sync-status-${syncStatus}`}
+          {/* Save Status Indicator */}
+          <div
+            className={`save-status-indicator status-${syncStatus}`}
             title={
-              syncStatus === 'saved' ? '已同步' :
-              syncStatus === 'saving' ? '同步中...' :
-              '未同步（點擊手動同步）'
+              syncStatus === 'saved' ? '已儲存' :
+              syncStatus === 'saving' ? '儲存中...' :
+              '未儲存'
             }
-          >
-            🔄
-          </button>
-
-          <button
-            onClick={handleToggleMarkdownMode}
-            className={isMarkdownMode ? 'toolbar-button toolbar-button-md is-active' : 'toolbar-button toolbar-button-md'}
-            title={isMarkdownMode ? '切換到 WYSIWYG 模式' : '切換到 Markdown 源碼模式'}
-          >
-            MD⬇
-          </button>
-          <button
-            onClick={handleImportMarkdown}
-            className="toolbar-button toolbar-button-import"
-            title="導入 Markdown 文件"
-          >
-            📂
-          </button>
-          <button
-            onClick={handleExportMarkdown}
-            className="toolbar-button toolbar-button-export"
-            title="導出 Markdown 文件"
-          >
-            💾
-          </button>
-          <button
-            onClick={handleClearEditor}
-            className="toolbar-button toolbar-button-clear"
-            title="清空編輯器"
-          >
-            🗑️
-          </button>
+          />
         </div>
 
         {isMarkdownMode ? (

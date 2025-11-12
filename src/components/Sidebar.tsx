@@ -160,7 +160,7 @@ const Sidebar = ({ onSelectPage, onSelectFolder, selectedFolderId: selectedFolde
             '顯示全部'
           }
         >
-          📁
+          ✏️
         </button>
 
         {/* Google 認證按鈕 - 固定在控制區底部 */}
