@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Folder, Page, db } from '../services/db'
+import { Folder, db } from '../services/db'
 import { storage } from '../services/storage'
 import { exportFolder, selectAndImportFolder } from '../utils/folderImportExport'
 import { ensureRecycleFolderExists, RECYCLE_FOLDER_ID } from '../services/recycleBin'
@@ -11,13 +11,12 @@ import ToastContainer from './ToastContainer'
 
 interface FolderTreeProps {
   onSelectFolder: (folderId: string) => void
-  onSelectPage: (page: Page) => void
   onFolderDeleted?: () => void  // 當 folder 被刪除時的回調
   selectedFolderId: string | null
   refreshKey?: number  // 當這個值改變時，重新加載數據
 }
 
-const FolderTree = ({ onSelectFolder, onSelectPage, onFolderDeleted, selectedFolderId, refreshKey }: FolderTreeProps) => {
+const FolderTree = ({ onSelectFolder, onFolderDeleted, selectedFolderId, refreshKey }: FolderTreeProps) => {
   const [folders, setFolders] = useState<Folder[]>([])
   // 初始化時從 localStorage 恢復展開狀態
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => {

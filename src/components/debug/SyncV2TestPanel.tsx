@@ -3,7 +3,7 @@
  * 測試新的 V2 同步架構
  */
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { syncManagerV2 } from '../../services/syncV2/syncManagerV2'
 import { useAuth } from '../../contexts/AuthContext'
 import { db } from '../../services/db'

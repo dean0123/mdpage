@@ -15,7 +15,6 @@ export interface AuthState {
 type AuthStateListener = (state: AuthState) => void
 
 class GoogleAuthService {
-  private gapiInited = false
   private gisInited = false
   private tokenClient: any = null
   private authState: AuthState = {
@@ -87,7 +86,6 @@ class GoogleAuthService {
           await window.gapi.client.load('drive', 'v3')
 
           console.log('GAPI Client initialized with Drive API v3')
-          this.gapiInited = true
           resolve()
         } catch (error) {
           console.error('Failed to initialize GAPI Client:', error)

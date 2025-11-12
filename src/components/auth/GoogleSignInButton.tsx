@@ -2,7 +2,6 @@
  * Google 登入按鈕組件 - 圓形 G logo 設計
  */
 
-import React from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 
 export function GoogleSignInButton() {

@@ -303,7 +303,7 @@ class DatabaseService {
 
   // ===== DeletedFolder 操作 =====
 
-  async addDeletedFolder(folderId: string): Promise<void> {
+  async addDeletedFolder(folderId: string, deletedAt?: number): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.db) return reject(new Error('Database not initialized'))
 
@@ -311,7 +311,7 @@ class DatabaseService {
       const store = transaction.objectStore(DELETED_FOLDERS_STORE)
       const deletedFolder: DeletedFolder = {
         folderId,
-        deletedAt: Date.now()
+        deletedAt: deletedAt ?? Date.now()
       }
       const request = store.put(deletedFolder)
 
@@ -361,7 +361,7 @@ class DatabaseService {
 
   // ===== DeletedPage 操作 =====
 
-  async addDeletedPage(pageId: string): Promise<void> {
+  async addDeletedPage(pageId: string, deletedAt?: number): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.db) return reject(new Error('Database not initialized'))
 
@@ -369,7 +369,7 @@ class DatabaseService {
       const store = transaction.objectStore(DELETED_PAGES_STORE)
       const deletedPage: DeletedPage = {
         pageId,
-        deletedAt: Date.now()
+        deletedAt: deletedAt ?? Date.now()
       }
       const request = store.put(deletedPage)
 

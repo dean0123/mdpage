@@ -2,7 +2,7 @@
  * 用戶資料顯示組件 - 圓形頭像設計
  */
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 
 export function UserProfile() {

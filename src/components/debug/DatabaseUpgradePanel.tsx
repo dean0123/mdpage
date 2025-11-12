@@ -3,7 +3,7 @@
  * 手動升級 IndexedDB 到 V2
  */
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 
 export function DatabaseUpgradePanel() {
   const [log, setLog] = useState<string[]>([])

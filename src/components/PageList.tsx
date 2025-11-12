@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Page, Folder, db } from '../services/db'
+import { Page, db } from '../services/db'
 import { ensureFolderAndPage } from '../services/pageHelper'
 import { storage } from '../services/storage'
 
@@ -8,7 +8,6 @@ interface PageListProps {
   onSelectPage: (page: Page) => void
   onSelectFolder?: (folderId: string) => void
   onFolderCreated?: () => void  // 當創建 folder 時的回調
-  onPageCreated?: () => void  // 當創建 page 時的回調
   selectedPageId: string | null
   selectedPage: Page | null
   refreshKey?: number  // 當這個值改變時，重新加載數據
@@ -17,7 +16,7 @@ interface PageListProps {
 type SortBy = 'none' | 'updatedAt' | 'createdAt' | 'name'
 type SortOrder = 'asc' | 'desc'
 
-const PageList = ({ folderId, onSelectPage, onSelectFolder, onFolderCreated, onPageCreated, selectedPageId, selectedPage, refreshKey }: PageListProps) => {
+const PageList = ({ folderId, onSelectPage, onSelectFolder, onFolderCreated, selectedPageId, selectedPage, refreshKey }: PageListProps) => {
   const [pages, setPages] = useState<Page[]>([])
   // 初始化時從 localStorage 恢復排序設定，默認為字母小到大
   const [sortBy, setSortBy] = useState<SortBy>(() => {

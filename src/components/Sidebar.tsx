@@ -175,7 +175,6 @@ const Sidebar = ({ onSelectPage, onSelectFolder, selectedFolderId: selectedFolde
           <div className="sidebar-folder" style={{ width: `${folderWidth}px` }}>
             <FolderTree
               onSelectFolder={handleSelectFolder}
-              onSelectPage={onSelectPage}
               onFolderDeleted={triggerFolderRefresh}
               selectedFolderId={internalSelectedFolderId}
               refreshKey={folderRefreshKey}
@@ -197,7 +196,6 @@ const Sidebar = ({ onSelectPage, onSelectFolder, selectedFolderId: selectedFolde
               onSelectPage={onSelectPage}
               onSelectFolder={handleSelectFolder}
               onFolderCreated={triggerFolderRefresh}
-              onPageCreated={triggerPageRefresh}
               selectedPageId={selectedPageId}
               selectedPage={selectedPage}
               refreshKey={pageRefreshKey}

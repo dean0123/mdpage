@@ -3,7 +3,7 @@
  * 顯示為浮動面板，可展開查看詳細資訊
  */
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { syncManagerV2 } from '../../services/syncV2/syncManagerV2'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -239,14 +239,14 @@ export function SyncStatus() {
                   上次同步結果：
                 </div>
                 <div style={{ display: 'grid', gap: '4px' }}>
-                  {lastResult.uploaded > 0 && (
+                  {(lastResult.foldersUploaded > 0 || lastResult.pagesUploaded > 0) && (
                     <div>
-                      ↑ 上傳：<strong>{lastResult.uploaded}</strong> 個檔案夾
+                      ↑ 上傳：<strong>{lastResult.foldersUploaded}</strong> 個檔案夾、<strong>{lastResult.pagesUploaded}</strong> 個頁面
                     </div>
                   )}
-                  {lastResult.downloaded > 0 && (
+                  {(lastResult.foldersDownloaded > 0 || lastResult.pagesDownloaded > 0) && (
                     <div>
-                      ↓ 下載：<strong>{lastResult.downloaded}</strong> 個檔案夾
+                      ↓ 下載：<strong>{lastResult.foldersDownloaded}</strong> 個檔案夾、<strong>{lastResult.pagesDownloaded}</strong> 個頁面
                     </div>
                   )}
                   {lastResult.conflicts > 0 && (
@@ -254,8 +254,10 @@ export function SyncStatus() {
                       ⚠ 衝突：<strong>{lastResult.conflicts}</strong> 個（已建立副本）
                     </div>
                   )}
-                  {lastResult.uploaded === 0 &&
-                    lastResult.downloaded === 0 &&
+                  {lastResult.foldersUploaded === 0 &&
+                    lastResult.foldersDownloaded === 0 &&
+                    lastResult.pagesUploaded === 0 &&
+                    lastResult.pagesDownloaded === 0 &&
                     lastResult.conflicts === 0 && (
                       <div style={{ color: '#10b981' }}>✓ 無需同步，資料已是最新</div>
                     )}

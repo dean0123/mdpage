@@ -2,7 +2,7 @@
  * 診斷面板 - 用於檢查數據庫狀態
  */
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { db } from '../../services/db'
 
 export function DiagnosticPanel() {

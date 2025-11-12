@@ -3,7 +3,7 @@
  * 檢查 DB 中的所有數據，找出隱藏/孤立的 folders 和 pages
  */
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { db } from '../../services/db'
 
 export function DataInspectorPanel() {
