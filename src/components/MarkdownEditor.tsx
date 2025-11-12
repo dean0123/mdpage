@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
+import { wrappingInputRule, InputRule } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Link from '@tiptap/extension-link'
 import Code from '@tiptap/extension-code'
+import CodeBlock from '@tiptap/extension-code-block'
 import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
@@ -18,6 +20,54 @@ import { storage } from '../services/storage'
 import { ensureFolderAndPage } from '../services/pageHelper'
 import { getMarkdownFromEditor, extractPageTitle } from '../utils/markdownConverter'
 import '../styles/editor.css'
+
+// HTML 转义函数
+const escapeHtml = (text: string): string => {
+  const map: { [key: string]: string } = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  }
+  return text.replace(/[&<>"']/g, (char) => map[char])
+}
+
+// 配置 marked：啟用 GFM 並自定義 renderer
+marked.use({
+  gfm: true,  // 啟用 GitHub Flavored Markdown
+  breaks: false,
+})
+
+// 自定義 renderer 來生成 Tiptap 期望的 HTML 結構
+marked.use({
+  renderer: {
+    code(code: string, language: string | undefined) {
+      const lang = language || ''
+      const langClass = lang ? ` class="language-${lang}" data-language="${lang}"` : ''
+      // 确保 HTML 代码被正确转义
+      const escapedCode = escapeHtml(code)
+      // 將 class 添加到 <pre> 標籤，而不是 <code> 標籤
+      return `<pre${langClass}><code>${escapedCode}</code></pre>`
+    },
+    list(body: string, ordered: boolean, start: number | '') {
+      // 檢測是否為 task list（包含 data-type="taskItem" 的項目）
+      const isTaskList = body.includes('data-type="taskItem"')
+      const tag = ordered ? 'ol' : 'ul'
+      const typeAttr = isTaskList ? ' data-type="taskList"' : ''
+      return `<${tag}${typeAttr}>\n${body}</${tag}>\n`
+    },
+    listitem(text: string, task: boolean, checked: boolean) {
+      // marked 的 GFM 會自動解析 task list 並設置 task 和 checked 參數
+      if (task) {
+        // 這是一個 task list item
+        return `<li data-type="taskItem" data-checked="${checked}"><label><input type="checkbox"${checked ? ' checked' : ''}><span>${text}</span></label></li>\n`
+      }
+      // 普通列表項
+      return `<li>${text}</li>\n`
+    }
+  }
+})
 
 // 輔助函數：將 Markdown 轉換為 HTML，並修復 marked 在 code block 末尾添加的換行符
 const markdownToHtml = (markdown: string): string => {
@@ -158,6 +208,7 @@ const MarkdownEditor = () => {
     extensions: [
       StarterKit.configure({
         code: false, // 禁用 StarterKit 的默認 code，我們將自定義配置
+        codeBlock: false, // 禁用 StarterKit 的 codeBlock，使用自定义配置
       }),
       Code.extend({
         // 允許 code 與其他 marks（如 link）共存
@@ -165,6 +216,25 @@ const MarkdownEditor = () => {
       }).configure({
         HTMLAttributes: {
           class: 'inline-code',
+        },
+      }),
+      CodeBlock.extend({
+        addAttributes() {
+          return {
+            language: {
+              default: null,
+              parseHTML: element => element.getAttribute('data-language') || element.className.replace(/^language-/, ''),
+              renderHTML: attributes => {
+                if (!attributes.language) {
+                  return {}
+                }
+                return {
+                  'data-language': attributes.language,
+                  class: `language-${attributes.language}`,
+                }
+              },
+            },
+          }
         },
       }),
       Placeholder.configure({
@@ -200,7 +270,97 @@ const MarkdownEditor = () => {
       TableHeader,
       TableCell,
       TaskList,
-      TaskItem.configure({
+      TaskItem.extend({
+        addAttributes() {
+          return {
+            checked: {
+              default: false,
+              // 從 HTML 解析時，讀取 data-checked 屬性或 input 的 checked 狀態
+              parseHTML: element => {
+                // 優先讀取 data-checked 屬性
+                const dataChecked = element.getAttribute('data-checked')
+                if (dataChecked !== null) {
+                  return dataChecked === 'true'
+                }
+                // 否則讀取 input checkbox 的 checked 狀態
+                const checkbox = element.querySelector('input[type="checkbox"]')
+                return checkbox?.checked || false
+              },
+              // 渲染時保持原有行為
+              renderHTML: attributes => {
+                return {
+                  'data-checked': attributes.checked,
+                }
+              },
+            },
+          }
+        },
+        addInputRules() {
+          return [
+            // 快捷輸入：-[ → 空的 checkbox
+            wrappingInputRule({
+              find: /^-\[\s$/,
+              type: this.type,
+              getAttributes: () => ({ checked: false }),
+            }),
+            // 快捷輸入：-[x → checked checkbox
+            wrappingInputRule({
+              find: /^-\[x\s$/,
+              type: this.type,
+              getAttributes: () => ({ checked: true }),
+            }),
+            // 快捷輸入：-[X → checked checkbox (大寫也支援)
+            wrappingInputRule({
+              find: /^-\[X\s$/,
+              type: this.type,
+              getAttributes: () => ({ checked: true }),
+            }),
+            // 在 bulletList item 中輸入 [ 空格 → 轉換成空 checkbox
+            new InputRule({
+              find: /^\[\s$/,
+              handler: ({ state, range, match, chain }) => {
+                // 檢查當前是否在 listItem 中
+                const { $from } = state.selection
+                const listItem = $from.node($from.depth - 1)
+
+                if (listItem && listItem.type.name === 'listItem') {
+                  // 檢查父節點是否為 bulletList
+                  const list = $from.node($from.depth - 2)
+                  if (list && list.type.name === 'bulletList') {
+                    // 轉換為 taskList 和 taskItem
+                    chain()
+                      .deleteRange({ from: range.from, to: range.to })
+                      .toggleTaskList()
+                      .run()
+                  }
+                }
+              },
+            }),
+            // 在 bulletList item 中輸入 [x 空格 → 轉換成 checked checkbox
+            new InputRule({
+              find: /^\[x\s$/i,
+              handler: ({ state, range, match, chain }) => {
+                // 檢查當前是否在 listItem 中
+                const { $from } = state.selection
+                const listItem = $from.node($from.depth - 1)
+
+                if (listItem && listItem.type.name === 'listItem') {
+                  // 檢查父節點是否為 bulletList
+                  const list = $from.node($from.depth - 2)
+                  if (list && list.type.name === 'bulletList') {
+                    // 轉換為 taskList 和 taskItem，並設置為 checked
+                    chain()
+                      .deleteRange({ from: range.from, to: range.to })
+                      .toggleTaskList()
+                      .updateAttributes('taskItem', { checked: true })
+                      .run()
+                  }
+                }
+              },
+            }),
+          ]
+        },
+      }).configure({
         nested: true,
       }),
     ],

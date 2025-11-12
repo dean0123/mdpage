@@ -757,9 +757,11 @@
   padding: 16px;
   border-radius: 6px;
   border: 1px solid #d0d7de;
+  border-left: 3px solid #d0d7de;
   overflow-x: auto;
   margin: 1em 0;
   line-height: 1.45;
+  position: relative;
 }
 
 .ProseMirror pre code {
@@ -771,6 +773,196 @@
   border: none;
 }
 
+/* JavaScript / JS */
+.ProseMirror pre.language-javascript,
+.ProseMirror pre.language-js {
+  border-left-color: #f7df1e;
+  background: #fffef7;
+}
+.ProseMirror pre.language-javascript::after,
+.ProseMirror pre.language-js::after {
+  content: 'JS';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 0.7em;
+  color: #f7df1e;
+  font-weight: 700;
+  background: #24292f;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* TypeScript / TS */
+.ProseMirror pre.language-typescript,
+.ProseMirror pre.language-ts {
+  border-left-color: #3178c6;
+  background: #f7f9ff;
+}
+.ProseMirror pre.language-typescript::after,
+.ProseMirror pre.language-ts::after {
+  content: 'TS';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 0.7em;
+  color: white;
+  font-weight: 700;
+  background: #3178c6;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* Python / PY */
+.ProseMirror pre.language-python,
+.ProseMirror pre.language-py {
+  border-left-color: #3776ab;
+  background: #f7f9fb;
+}
+.ProseMirror pre.language-python::after,
+.ProseMirror pre.language-py::after {
+  content: 'PY';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 0.7em;
+  color: white;
+  font-weight: 700;
+  background: #3776ab;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* Java */
+.ProseMirror pre.language-java {
+  border-left-color: #b07219;
+  background: #fffcf7;
+}
+.ProseMirror pre.language-java::after {
+  content: 'JAVA';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 0.7em;
+  color: white;
+  font-weight: 700;
+  background: #b07219;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* CSS */
+.ProseMirror pre.language-css {
+  border-left-color: #563d7c;
+  background: #f9f7fb;
+}
+.ProseMirror pre.language-css::after {
+  content: 'CSS';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 0.7em;
+  color: white;
+  font-weight: 700;
+  background: #563d7c;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* HTML */
+.ProseMirror pre.language-html {
+  border-left-color: #e34c26;
+  background: #fff9f7;
+}
+.ProseMirror pre.language-html::after {
+  content: 'HTML';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 0.7em;
+  color: white;
+  font-weight: 700;
+  background: #e34c26;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* JSON */
+.ProseMirror pre.language-json {
+  border-left-color: #292929;
+  background: #f8f8f8;
+}
+.ProseMirror pre.language-json::after {
+  content: 'JSON';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 0.7em;
+  color: white;
+  font-weight: 700;
+  background: #292929;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* Bash / Shell */
+.ProseMirror pre.language-bash,
+.ProseMirror pre.language-sh,
+.ProseMirror pre.language-shell {
+  border-left-color: #4eaa25;
+  background: #f7fbf7;
+}
+.ProseMirror pre.language-bash::after,
+.ProseMirror pre.language-sh::after,
+.ProseMirror pre.language-shell::after {
+  content: 'BASH';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 0.7em;
+  color: white;
+  font-weight: 700;
+  background: #4eaa25;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* Go */
+.ProseMirror pre.language-go {
+  border-left-color: #00add8;
+  background: #f7fcfe;
+}
+.ProseMirror pre.language-go::after {
+  content: 'GO';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 0.7em;
+  color: white;
+  font-weight: 700;
+  background: #00add8;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* Rust */
+.ProseMirror pre.language-rust {
+  border-left-color: #dea584;
+  background: #fffdf9;
+}
+.ProseMirror pre.language-rust::after {
+  content: 'RUST';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 0.7em;
+  color: #24292f;
+  font-weight: 700;
+  background: #dea584;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
 .ProseMirror ul,
 .ProseMirror ol {
   padding-left: 2em;
@@ -780,30 +972,35 @@
 /* Task List - GitHub 風格 */
 .ProseMirror ul[data-type="taskList"] {
   list-style: none;
-  padding-left: 0;
+  padding-left: 2em;  /* 與普通列表完全一致 */
+  margin: 0.5em 0;    /* 與普通列表行距一致 */
 }
 
 .ProseMirror ul[data-type="taskList"] li {
-  display: flex;
-  align-items: flex-start;
-  margin: 0.25em 0;
+  display: block;  /* 改用 block 而不是 flex，讓文字自然排列 */
+  margin: 0;
+  padding-left: 0;
 }
 
 .ProseMirror ul[data-type="taskList"] li > label {
-  flex: 0 0 auto;
-  margin-right: 0.5em;
+  display: block;
   user-select: none;
+  margin: 0;
+  padding: 0;
 }
 
+.ProseMirror ul[data-type="taskList"] li > label > span,
 .ProseMirror ul[data-type="taskList"] li > div {
-  flex: 1 1 auto;
+  display: inline;  /* 文字內聯顯示 */
 }
 
 .ProseMirror ul[data-type="taskList"] input[type="checkbox"] {
   cursor: pointer;
   width: 16px;
   height: 16px;
-  margin-top: 0.25em;
+  margin: 0.25em 0.375em 0 -1.875em;  /* 更精確的對齊：往左移 1.875em，右邊留 0.375em */
+  float: left;       /* 使用 float 讓文字環繞 */
+  flex-shrink: 0;
 }
 
 .ProseMirror blockquote {
