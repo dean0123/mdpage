@@ -559,7 +559,13 @@ const MarkdownEditor = () => {
           // 恢復滾動位置
           if (currentPage.editorState.scrollTop !== undefined && editorScrollRef.current) {
             editorScrollRef.current.scrollTop = currentPage.editorState.scrollTop
+          } else if (editorScrollRef.current) {
+            // 如果沒有記憶的滾動位置，預設捲到最上方
+            editorScrollRef.current.scrollTop = 0
           }
+        } else if (editorScrollRef.current) {
+          // 如果沒有 editorState，預設捲到最上方
+          editorScrollRef.current.scrollTop = 0
         }
 
         // 標記首次載入完成
@@ -596,7 +602,44 @@ const MarkdownEditor = () => {
       // 使用 setTimeout 確保 setContent 完成後再重置標誌
       setTimeout(() => {
         isSyncingFromMarkdown.current = false
+        // 手動觸發圖片 URL 轉換
+        convertImageUrlsManually()
       }, 0)
+    }
+  }
+
+  // 手動觸發圖片 URL 轉換的函數
+  const convertImageUrlsManually = async () => {
+    const images = document.querySelectorAll('img[data-src^="image://"]')
+
+    for (const imgElement of images) {
+      const img = imgElement as HTMLImageElement
+      const dataSrc = img.getAttribute('data-src')
+      if (!dataSrc) continue
+
+      const imageId = dataSrc.replace('image://', '')
+
+      // 首先檢查映射表
+      let blobUrl = imageBlobUrlMap.current.get(imageId)
+
+      if (!blobUrl) {
+        // 從 IndexedDB 讀取圖片
+        try {
+          const imageData = await db.getImage(imageId)
+          if (imageData) {
+            blobUrl = URL.createObjectURL(imageData.blob)
+            imageBlobUrlMap.current.set(imageId, blobUrl)
+          }
+        } catch (error) {
+          console.error('無法載入圖片:', imageId, error)
+          continue
+        }
+      }
+
+      // 設置 blob URL
+      if (blobUrl) {
+        img.src = blobUrl
+      }
     }
   }
 
@@ -653,7 +696,13 @@ const MarkdownEditor = () => {
           // 恢復滾動位置
           if (page.editorState.scrollTop !== undefined && editorScrollRef.current) {
             editorScrollRef.current.scrollTop = page.editorState.scrollTop
+          } else if (editorScrollRef.current) {
+            // 如果沒有記憶的滾動位置，預設捲到最上方
+            editorScrollRef.current.scrollTop = 0
           }
+        } else if (editorScrollRef.current) {
+          // 如果沒有 editorState，預設捲到最上方
+          editorScrollRef.current.scrollTop = 0
         }
 
         // 自動 focus 到編輯器
