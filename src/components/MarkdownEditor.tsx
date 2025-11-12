@@ -50,7 +50,7 @@ marked.use({
       // 將 class 添加到 <pre> 標籤，而不是 <code> 標籤
       return `<pre${langClass}><code>${escapedCode}</code></pre>`
     },
-    list(body: string, ordered: boolean, start: number | '') {
+    list(body: string, ordered: boolean) {
       // 檢測是否為 task list（包含 data-type="taskItem" 的項目）
       const isTaskList = body.includes('data-type="taskItem"')
       const tag = ordered ? 'ol' : 'ul'
@@ -283,7 +283,7 @@ const MarkdownEditor = () => {
                   return dataChecked === 'true'
                 }
                 // 否則讀取 input checkbox 的 checked 狀態
-                const checkbox = element.querySelector('input[type="checkbox"]')
+                const checkbox = element.querySelector('input[type="checkbox"]') as HTMLInputElement | null
                 return checkbox?.checked || false
               },
               // 渲染時保持原有行為
@@ -318,7 +318,7 @@ const MarkdownEditor = () => {
             // 在 bulletList item 中輸入 [ 空格 → 轉換成空 checkbox
             new InputRule({
               find: /^\[\s$/,
-              handler: ({ state, range, match, chain }) => {
+              handler: ({ state, range, chain }) => {
                 // 檢查當前是否在 listItem 中
                 const { $from } = state.selection
                 const listItem = $from.node($from.depth - 1)
@@ -339,7 +339,7 @@ const MarkdownEditor = () => {
             // 在 bulletList item 中輸入 [x 空格 → 轉換成 checked checkbox
             new InputRule({
               find: /^\[x\s$/i,
-              handler: ({ state, range, match, chain }) => {
+              handler: ({ state, range, chain }) => {
                 // 檢查當前是否在 listItem 中
                 const { $from } = state.selection
                 const listItem = $from.node($from.depth - 1)
@@ -578,13 +578,6 @@ const MarkdownEditor = () => {
     setSelectedFolderId(folderId)
     // 保存選中的文件夾到 localStorage
     storage.saveSelectedFolder(folderId)
-  }
-
-  const handleManualSync = async () => {
-    if (autoSaveTimer.current) {
-      clearTimeout(autoSaveTimer.current)
-    }
-    await saveCurrentPage(markdownText)
   }
 
   // 編輯器獲得焦點時的處理

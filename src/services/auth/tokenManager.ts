@@ -120,6 +120,22 @@ class TokenManager {
   }
 
   /**
+   * 恢復自動刷新計時器（用於頁面重新載入時）
+   */
+  restoreRefreshTimer(): void {
+    const tokenData = this.getTokenData()
+    if (!tokenData) return
+
+    // 計算剩餘的有效時間（秒）
+    const remainingSeconds = Math.floor((tokenData.expiresAt - Date.now()) / 1000)
+
+    if (remainingSeconds > 0) {
+      console.log(`恢復自動刷新計時器，token 剩餘 ${remainingSeconds / 60} 分鐘`)
+      this.scheduleTokenRefresh(remainingSeconds)
+    }
+  }
+
+  /**
    * 檢查 Token 是否有效
    */
   isTokenValid(): boolean {

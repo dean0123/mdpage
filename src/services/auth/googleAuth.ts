@@ -47,6 +47,9 @@ class GoogleAuthService {
       // 檢查是否有已存在的 token
       this.checkExistingAuth()
 
+      // 恢復自動刷新計時器（如果有有效的 token）
+      tokenManager.restoreRefreshTimer()
+
       this.updateAuthState({ isLoading: false })
     } catch (error) {
       console.error('Failed to initialize Google Auth:', error)
